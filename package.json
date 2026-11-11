@@ -7,7 +7,8 @@
     "db:start": "tsx scripts/dev-db.ts",
     "db:generate": "pnpm --filter @krello/database generate",
     "db:migrate": "pnpm --filter @krello/database migrate",
-    "db:seed": "pnpm --filter @krello/database seed",
+    "db:seed": "tsx --env-file=.env scripts/seed.ts",
+    "db:reset": "pnpm db:migrate && pnpm db:seed",
     "dev": "pnpm --filter @krello/web dev",
     "build": "pnpm --filter @krello/web build",
     "worker": "tsx scripts/worker.ts",
@@ -15,7 +16,10 @@
     "typecheck": "pnpm -r typecheck"
   },
   "devDependencies": {
+    "@krello/booking-engine": "workspace:*",
+    "@krello/database": "workspace:*",
     "@types/node": "^22.10.0",
+    "drizzle-orm": "^0.44.0",
     "embedded-postgres": "^17.5.0-beta.15",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
