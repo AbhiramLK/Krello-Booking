@@ -3,6 +3,7 @@ import postgres from "postgres";
 import * as schema from "./schema";
 
 export * from "./schema";
+export * from "./helpers";
 export { schema };
 
 export type Db = PostgresJsDatabase<typeof schema>;
