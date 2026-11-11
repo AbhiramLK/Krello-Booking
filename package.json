@@ -1,0 +1,27 @@
+{
+  "name": "krello-booking",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.23.0",
+  "scripts": {
+    "db:start": "tsx scripts/dev-db.ts",
+    "db:generate": "pnpm --filter @krello/database generate",
+    "db:migrate": "pnpm --filter @krello/database migrate",
+    "db:seed": "pnpm --filter @krello/database seed",
+    "dev": "pnpm --filter @krello/web dev",
+    "build": "pnpm --filter @krello/web build",
+    "worker": "tsx scripts/worker.ts",
+    "test": "vitest run",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "embedded-postgres": "^17.5.0-beta.15",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^3.0.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["embedded-postgres", "esbuild", "@embedded-postgres/windows-x64", "sharp", "unrs-resolver"]
+  }
+}

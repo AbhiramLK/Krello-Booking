@@ -9,3 +9,4 @@ dist/
 .superpowers/
 coverage/
 .DS_Store
+.pgdata/
