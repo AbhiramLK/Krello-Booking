@@ -21,7 +21,6 @@ import {
   locationHours,
   locations,
   outboxEvents,
-  platformSettings,
   pricingRules,
   resourceSchedules,
   resources,
@@ -165,7 +164,6 @@ interface Customer {
 
 interface LedgerEntry {
   bookingId: string;
-  businessIndex: number;
   locationId: string;
   customer: Customer | null;
   completedAt: Date;
@@ -510,7 +508,7 @@ async function transition(
 async function runBooking(
   env: Env,
   plan: Plan,
-  opts: { source: Source; requestedAt: Date; outcome: Outcome; customer: Customer; forceApproved?: boolean },
+  opts: { source: Source; requestedAt: Date; outcome: Outcome; customer: Customer },
 ): Promise<string | null> {
   const { db, rng, now, biz } = env;
   const { source, requestedAt, customer } = opts;
@@ -633,7 +631,7 @@ async function runBooking(
   } else if (outcome === "completed") {
     const t = new Date(Math.min(plan.endsAt.getTime() + rng.int(0, 25) * MIN, now.getTime()));
     await transition(env, id, "complete", floor, t);
-    if (online) env.ledger.push({ bookingId: id, businessIndex: biz.index, locationId: plan.loc.id, customer, completedAt: t });
+    if (online) env.ledger.push({ bookingId: id, locationId: plan.loc.id, customer, completedAt: t });
 
     // Most completed bookings are settled at the venue.
     const left = total - (advance ?? 0);
@@ -788,7 +786,6 @@ export async function seedDemo(db: Db, opts: { now?: Date } = {}): Promise<SeedS
     .values(CATEGORIES.map((c, i) => ({ ...c, sortOrder: i })))
     .returning();
   const categories = new Map(categoryRows.map((c) => [c.slug, c.id]));
-  await db.insert(platformSettings).values({ key: "subscription_grace_days", value: 7 });
 
   // People. Customers are real users so they can sign in and see their bookings.
   const customerList = buildCustomerList();
