@@ -2,12 +2,13 @@
 
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { AppError, addNoteForTenant, decideBooking, getTenantContext, markNotificationsRead } from "@krello/core";
 import type { BookingStatus } from "@krello/booking-engine/labels";
 import { runAction, type ActionResult } from "@/lib/action";
 import { getDb } from "@/lib/db";
 import { BUSINESS_COOKIE, getCurrentUser, resolveTenant } from "@/lib/session";
-import { addNoteSchema, businessIdSchema, decideBookingSchema } from "./schemas";
+import { addNoteSchema, BOOKING_SEARCH_COOKIE, bookingFiltersSchema, bookingsHref, businessIdSchema, decideBookingSchema } from "./schemas";
 
 /** The member's business, or a failure the client can show. Never redirects: this runs from a client call. */
 async function tenant() {
@@ -72,4 +73,42 @@ export async function markNotificationsReadAction(): Promise<ActionResult<null>>
     revalidatePath("/dashboard", "layout");
     return null;
   });
+}
+
+const SEARCH_COOKIE_OPTIONS = {
+  httpOnly: true,
+  sameSite: "lax" as const,
+  secure: process.env.NODE_ENV === "production",
+  path: "/dashboard/bookings",
+};
+
+/**
+ * Applies the bookings list filters. Everything but the search text goes in the
+ * address; the search text, which may be a phone number, goes in a cookie so it
+ * never appears in a URL or request log.
+ */
+export async function filterBookingsAction(form: FormData): Promise<void> {
+  const field = (k: string) => {
+    const v = form.get(k);
+    return typeof v === "string" && v ? v : undefined;
+  };
+  const f = bookingFiltersSchema.parse({
+    q: field("q"),
+    status: field("status"),
+    source: field("source"),
+    payment: field("payment"),
+    location: field("location"),
+    from: field("from"),
+    to: field("to"),
+  });
+  const jar = await cookies();
+  if (f.q) jar.set(BOOKING_SEARCH_COOKIE, f.q, SEARCH_COOKIE_OPTIONS);
+  else jar.delete({ name: BOOKING_SEARCH_COOKIE, path: SEARCH_COOKIE_OPTIONS.path });
+  redirect(bookingsHref(f));
+}
+
+/** Clears every bookings list filter, including the remembered search text. */
+export async function clearBookingFiltersAction(): Promise<void> {
+  (await cookies()).delete({ name: BOOKING_SEARCH_COOKIE, path: SEARCH_COOKIE_OPTIONS.path });
+  redirect("/dashboard/bookings");
 }

@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { cookies } from "next/headers";
 import { effectiveStatus, listBookingsForTenant } from "@krello/core";
 import { STATUS_LABEL } from "@krello/booking-engine/labels";
 import { addDays, isValidDate, localToInstant } from "@krello/booking-engine/time";
@@ -10,7 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getDb } from "@/lib/db";
 import { requireTenant } from "@/lib/session";
-import { bookingFiltersSchema, firstParam, type BookingFilters } from "../schemas";
+import { clearBookingFiltersAction, filterBookingsAction } from "../actions";
+import { BOOKING_SEARCH_COOKIE, bookingFiltersSchema, bookingsHref, firstParam } from "../schemas";
 import { getLocations } from "../tenant";
 
 export const dynamic = "force-dynamic";
@@ -32,23 +33,13 @@ function Field({ id, label, children }: { id: string; label: string; children: R
   );
 }
 
-/** Search params for a filter set, without empty values. */
-function hrefFor(f: BookingFilters, page: number): string {
-  const q = new URLSearchParams();
-  for (const key of ["q", "status", "source", "payment", "location", "from", "to"] as const) {
-    const v = f[key];
-    if (v) q.set(key, v);
-  }
-  if (page > 1) q.set("page", String(page));
-  const s = q.toString();
-  return s ? `/dashboard/bookings?${s}` : "/dashboard/bookings";
-}
-
 /** Every booking the member may see, filtered and paged. Filters live in the address so a view can be reloaded. */
 export default async function BookingsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const ctx = await requireTenant("bookings.view");
   const raw = await searchParams;
-  const f = bookingFiltersSchema.parse(Object.fromEntries(Object.entries(raw).map(([k, v]) => [k, firstParam(v)])));
+  // The search text comes only from the cookie; a `q` in the address is ignored.
+  const fromUrl = Object.fromEntries(Object.entries(raw).filter(([k]) => k !== "q").map(([k, v]) => [k, firstParam(v)]));
+  const f = bookingFiltersSchema.parse({ ...fromUrl, q: (await cookies()).get(BOOKING_SEARCH_COOKIE)?.value });
   const locations = await getLocations(ctx);
   const tz = (locations.find((l) => l.id === f.location) ?? locations[0])?.timezone ?? "Asia/Kolkata";
   const from = f.from && isValidDate(f.from) ? localToInstant(f.from, 0, tz) : undefined;
@@ -75,7 +66,7 @@ export default async function BookingsPage({ searchParams }: { searchParams: Pro
       <h1 className="text-3xl font-semibold tracking-tight">Bookings</h1>
       <p className="mt-1 text-muted-foreground">Every request and booking, newest slot first unless you choose dates.</p>
 
-      <form method="get" action="/dashboard/bookings" role="search" aria-label="Filter bookings" className="mt-6 rounded-card border bg-card p-4 sm:p-5">
+      <form action={filterBookingsAction} role="search" aria-label="Filter bookings" className="mt-6 rounded-card border bg-card p-4 sm:p-5">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div className="sm:col-span-2">
             <Field id="f-q" label="Search">
@@ -136,9 +127,9 @@ export default async function BookingsPage({ searchParams }: { searchParams: Pro
             Apply filters
           </Button>
           {filtered && (
-            <Link href="/dashboard/bookings" className="text-sm font-medium text-primary hover:underline">
+            <Button type="submit" variant="link" formAction={clearBookingFiltersAction} className="h-10 px-1 text-sm font-medium">
               Clear filters
-            </Link>
+            </Button>
           )}
         </div>
       </form>
@@ -160,7 +151,7 @@ export default async function BookingsPage({ searchParams }: { searchParams: Pro
         </ul>
       )}
 
-      <Pagination page={Math.min(f.page, pages)} pages={pages} hrefFor={(p) => hrefFor(f, p)} />
+      <Pagination page={Math.min(f.page, pages)} pages={pages} hrefFor={(p) => bookingsHref(f, p)} />
     </>
   );
 }

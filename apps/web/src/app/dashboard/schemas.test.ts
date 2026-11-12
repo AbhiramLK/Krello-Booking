@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addNoteSchema, bookingFiltersSchema, businessIdSchema, decideBookingSchema } from "./schemas";
+import { addNoteSchema, bookingFiltersSchema, bookingsHref, businessIdSchema, decideBookingSchema } from "./schemas";
 
 const ID = "5b1f0c1e-62a4-4c43-9f60-2a0d4f7a9c11";
 
@@ -53,5 +53,12 @@ describe("dashboard payload validation", () => {
       q: "KR-ABC",
       page: 2,
     });
+  });
+
+  it("never puts the search text, which may be a phone number, in a list address", () => {
+    const f = bookingFiltersSchema.parse({ q: "+919000000091", status: "approved", location: ID, page: "3" });
+    expect(bookingsHref(f, 2)).toBe(`/dashboard/bookings?status=approved&location=${ID}&page=2`);
+    expect(bookingsHref(f)).not.toContain("9000000091");
+    expect(bookingsHref({})).toBe("/dashboard/bookings");
   });
 });

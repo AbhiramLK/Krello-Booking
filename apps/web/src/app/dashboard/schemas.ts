@@ -64,6 +64,25 @@ export const bookingFiltersSchema = z.object({
 
 export type BookingFilters = z.infer<typeof bookingFiltersSchema>;
 
+/**
+ * The search text can be a customer's phone number, so it never goes in the
+ * address (and from there into history and request logs). It lives in this
+ * httpOnly cookie, scoped to the bookings list, instead.
+ */
+export const BOOKING_SEARCH_COOKIE = "krello_booking_q";
+
+/** The bookings list address for a filter set. Never includes the search text. */
+export function bookingsHref(f: Omit<BookingFilters, "q" | "page">, page = 1): string {
+  const q = new URLSearchParams();
+  for (const key of ["status", "source", "payment", "location", "from", "to"] as const) {
+    const v = f[key];
+    if (v) q.set(key, v);
+  }
+  if (page > 1) q.set("page", String(page));
+  const s = q.toString();
+  return s ? `/dashboard/bookings?${s}` : "/dashboard/bookings";
+}
+
 export const locationParamSchema = loose(z.string().uuid());
 
 /** First value of a search param that may repeat. */
