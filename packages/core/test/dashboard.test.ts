@@ -1,29 +1,10 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { desc, eq } from "drizzle-orm";
-import {
-  bookingStatusHistory,
-  businessMemberships,
-  locationHours,
-  locations,
-  pricingRules,
-  resourceSchedules,
-  resources,
-  subscriptions,
-  users,
-  type Db,
-} from "@krello/database";
+import { bookingStatusHistory, subscriptions, type Db } from "@krello/database";
 import { addDays, createBlock, createBooking, EngineError, localDateOf, localToInstant, recordPayment, transitionBooking } from "@krello/booking-engine";
-import { closeTestDb, CUSTOMER, customer, makeVenue, newPhone, staff as ownerActor, testDb, TZ, type Venue } from "../../booking-engine/test/fixtures";
-import {
-  AppError,
-  bookingActions,
-  decideBooking,
-  getBookingForTenant,
-  getOverview,
-  getTenantContext,
-  listBookingsForTenant,
-  type TenantContext,
-} from "../src";
+import { closeTestDb, CUSTOMER, customer, staff as ownerActor, testDb, TZ, type Venue } from "../../booking-engine/test/fixtures";
+import { AppError, bookingActions, decideBooking, getBookingForTenant, getOverview, listBookingsForTenant } from "../src";
+import { makeOtherBusiness, makeTeam, rejectsWith } from "./team";
 
 process.env.SESSION_SECRET ??= "test-secret-at-least-16-chars";
 
@@ -32,86 +13,6 @@ beforeAll(() => {
   db = testDb();
 });
 afterAll(closeTestDb);
-
-interface Team {
-  v: Venue;
-  /** A second location with one table. */
-  loc2: string;
-  loc2Table: string;
-  owner: TenantContext;
-  manager: TenantContext;
-  /** Assigned to location 1 only. */
-  staff: TenantContext;
-}
-
-async function newUser(name: string) {
-  const [u] = await db.insert(users).values({ phone: newPhone(), phoneVerifiedAt: new Date(), name }).returning();
-  return u!;
-}
-
-async function contextFor(userId: string, businessId: string): Promise<TenantContext> {
-  const [user] = await db.select().from(users).where(eq(users.id, userId));
-  const ctx = await getTenantContext(db, user!, businessId);
-  if (!ctx) throw new Error("no membership");
-  return ctx;
-}
-
-/** A venue with two locations, an owner, a manager and a staff member on location 1. */
-async function makeTeam(): Promise<Team> {
-  const v = await makeVenue(db);
-  const [loc] = await db
-    .insert(locations)
-    .values({
-      businessId: v.businessId,
-      name: "Second",
-      slug: "second",
-      address: "2 Test Road",
-      locality: "Koramangala",
-      city: "Bengaluru",
-      state: "Karnataka",
-      postalCode: "560034",
-      timezone: TZ,
-    })
-    .returning();
-  const base = { businessId: v.businessId, locationId: loc!.id };
-  const [table] = await db.insert(resources).values({ ...base, name: "Far table", resourceType: "table", capacity: 4, advanceDays: 30 }).returning();
-  await db.insert(locationHours).values([0, 1, 2, 3, 4, 5, 6].map((d) => ({ ...base, dayOfWeek: d, opensMinute: 9 * 60, closesMinute: 23 * 60 })));
-  await db.insert(resourceSchedules).values(
-    [0, 1, 2, 3, 4, 5, 6].map((d) => ({
-      businessId: v.businessId,
-      resourceId: table!.id,
-      dayOfWeek: d,
-      opensMinute: 10 * 60,
-      closesMinute: 22 * 60,
-      slotDurationMinutes: 60,
-      slotIntervalMinutes: 60,
-    })),
-  );
-  await db.insert(pricingRules).values({ ...base, resourceId: table!.id, ruleType: "base", amount: 30000 });
-
-  const manager = await newUser("Manager");
-  const staffUser = await newUser("Staff");
-  await db.insert(businessMemberships).values([
-    { businessId: v.businessId, userId: v.ownerId, role: "owner", locationIds: [] },
-    { businessId: v.businessId, userId: manager.id, role: "manager", locationIds: [] },
-    { businessId: v.businessId, userId: staffUser.id, role: "staff", locationIds: [v.locationId] },
-  ]);
-  return {
-    v,
-    loc2: loc!.id,
-    loc2Table: table!.id,
-    owner: await contextFor(v.ownerId, v.businessId),
-    manager: await contextFor(manager.id, v.businessId),
-    staff: await contextFor(staffUser.id, v.businessId),
-  };
-}
-
-/** A second business with only its owner. */
-async function makeOtherBusiness(): Promise<TenantContext> {
-  const v = await makeVenue(db);
-  await db.insert(businessMemberships).values({ businessId: v.businessId, userId: v.ownerId, role: "owner", locationIds: [] });
-  return contextFor(v.ownerId, v.businessId);
-}
 
 const request = (locationId: string, resourceId: string, startsAt: Date, now?: Date) =>
   createBooking(db, {
@@ -140,21 +41,10 @@ const phoneBooking = (v: Venue, locationId: string, resourceId: string, startsAt
     now,
   }).then((r) => r.booking);
 
-/** Rejects with an error of this class and code. */
-async function rejectsWith(p: Promise<unknown>, cls: typeof AppError | typeof EngineError, code: string) {
-  const e = await p.then(
-    () => null,
-    (err: unknown) => err,
-  );
-  expect(e).toBeInstanceOf(cls);
-  expect((e as { code: string }).code).toBe(code);
-  return e as AppError | EngineError;
-}
-
 describe("tenant isolation", () => {
   it("does not show or change another business's booking", async () => {
-    const a = await makeTeam();
-    const other = await makeOtherBusiness();
+    const a = await makeTeam(db);
+    const other = await makeOtherBusiness(db);
     const b = await request(a.v.locationId, a.v.tables[0]!, a.v.at(18));
 
     expect(await getBookingForTenant(db, other, b.id)).toBeNull();
@@ -165,7 +55,7 @@ describe("tenant isolation", () => {
 
 describe("staff assigned to one location", () => {
   it("cannot approve, but can mark a started booking as a no-show", async () => {
-    const t = await makeTeam();
+    const t = await makeTeam(db);
     const pending = await request(t.v.locationId, t.v.tables[0]!, t.v.at(18));
     const err = await rejectsWith(decideBooking(db, t.staff, { bookingId: pending.id, action: "approve" }), AppError, "forbidden");
     expect((err as AppError).status).toBe(403);
@@ -180,7 +70,7 @@ describe("staff assigned to one location", () => {
   });
 
   it("sees only bookings at the assigned location", async () => {
-    const t = await makeTeam();
+    const t = await makeTeam(db);
     const here = await request(t.v.locationId, t.v.tables[0]!, t.v.at(18));
     const there = await request(t.loc2, t.loc2Table, t.v.at(18));
 
@@ -203,7 +93,7 @@ describe("staff assigned to one location", () => {
   });
 
   it("gets overview figures for the assigned location only", async () => {
-    const t = await makeTeam();
+    const t = await makeTeam(db);
     const now = t.v.at(12);
     await phoneBooking(t.v, t.v.locationId, t.v.tables[0]!, t.v.at(14), t.v.at(9));
     await phoneBooking(t.v, t.loc2, t.loc2Table, t.v.at(14), t.v.at(9));
@@ -230,7 +120,7 @@ describe("staff assigned to one location", () => {
 
 describe("decisions", () => {
   it("records the manager who approved a request", async () => {
-    const t = await makeTeam();
+    const t = await makeTeam(db);
     const pending = await request(t.v.locationId, t.v.tables[0]!, t.v.at(18));
     const { booking } = await decideBooking(db, t.manager, { bookingId: pending.id, action: "approve" });
     expect(booking.status).toBe("approved");
@@ -247,7 +137,7 @@ describe("decisions", () => {
   });
 
   it("refuses decisions while the subscription has expired", async () => {
-    const t = await makeTeam();
+    const t = await makeTeam(db);
     const pending = await request(t.v.locationId, t.v.tables[0]!, t.v.at(18));
     await db.update(subscriptions).set({ status: "expired" }).where(eq(subscriptions.businessId, t.v.businessId));
     await rejectsWith(decideBooking(db, t.owner, { bookingId: pending.id, action: "approve" }), EngineError, "read_only");
@@ -256,7 +146,7 @@ describe("decisions", () => {
 
 describe("getOverview", () => {
   it("adds up today's value, collections, requests and cancellations", async () => {
-    const t = await makeTeam();
+    const t = await makeTeam(db);
     const { v } = t;
     const now = v.at(12);
 
@@ -308,7 +198,7 @@ describe("getOverview", () => {
   });
 
   it("says which resources are free, occupied or blocked right now", async () => {
-    const t = await makeTeam();
+    const t = await makeTeam(db);
     const { v } = t;
     await phoneBooking(v, v.locationId, v.tables[0]!, v.at(14), v.at(9));
     // A request holds its slot but nobody is playing on it yet.
@@ -341,7 +231,7 @@ describe("bookingActions", () => {
   });
 
   it("offers what the role and status allow", async () => {
-    const t = await makeTeam();
+    const t = await makeTeam(db);
     expect(bookingActions(t.owner, row({}), at(11))).toEqual(["approve", "reject"]);
     expect(bookingActions(t.staff, row({}), at(11))).toEqual([]);
     // An overdue request is not offered for a decision.

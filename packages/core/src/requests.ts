@@ -8,6 +8,7 @@ import {
   quoteBooking as priceWithEngine,
   transitionBooking,
   type AvailabilityResult,
+  type BookingPriceSnapshot,
   type BookingRow,
   type BookingStatus,
 } from "@krello/booking-engine";
@@ -61,6 +62,11 @@ export async function quoteBooking(
     endsAt: input.endsAt,
     groupSize: input.groupSize,
   });
+  return toBookingQuote(snapshot);
+}
+
+/** The price of a selection as the dashboard and the booking page show it. */
+export function toBookingQuote(snapshot: BookingPriceSnapshot): BookingQuote {
   return {
     total: snapshot.total,
     lines: snapshot.allocations.map((a) => ({

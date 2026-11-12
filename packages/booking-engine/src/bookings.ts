@@ -233,23 +233,30 @@ async function priceSelection(
 export interface QuoteBookingInput extends SelectionInput {
   locationId: string;
   now?: Date;
+  /**
+   * Who is asking. "customer" (the default) prices an online request and needs
+   * the venue to be taking online bookings. "business" prices a booking the
+   * venue's own team enters, by the rules `createBooking` applies to them:
+   * no online-only limits. The caller has already checked the team member's access.
+   */
+  audience?: "customer" | "business";
 }
 
 /**
- * Prices an online request without booking anything, by the same checks and
- * rules `createBooking` applies. Throws the same `EngineError` it would, for
+ * Prices a booking without making it, by the same checks and rules
+ * `createBooking` applies. Throws the same `EngineError` it would, for
  * example `slot_conflict` when a slot has just been taken.
  */
 export async function quoteBooking(db: DbOrTx, input: QuoteBookingInput): Promise<BookingPriceSnapshot> {
   const now = input.now ?? new Date();
+  const audience = input.audience ?? "customer";
   const resourceIds = validateSelection(input);
   const [loc] = await db.select().from(locations).where(eq(locations.id, input.locationId));
   if (!loc || loc.status !== "active") throw new EngineError("not_found", "Location not found.");
-  const access = await getTenantAccess(db, loc.businessId);
-  if (!access.publicBookable) {
+  if (audience === "customer" && !(await getTenantAccess(db, loc.businessId)).publicBookable) {
     throw new EngineError("not_bookable", "This venue is not taking online bookings right now.");
   }
-  const { snapshot } = await priceSelection(db, loc, resourceIds, input, now, "customer");
+  const { snapshot } = await priceSelection(db, loc, resourceIds, input, now, audience);
   return snapshot;
 }
 
