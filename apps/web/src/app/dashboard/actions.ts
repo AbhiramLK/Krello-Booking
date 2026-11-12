@@ -7,8 +7,15 @@ import { AppError, addNoteForTenant, decideBooking, getTenantContext, markNotifi
 import type { BookingStatus } from "@krello/booking-engine/labels";
 import { runAction, type ActionResult } from "@/lib/action";
 import { getDb } from "@/lib/db";
-import { BUSINESS_COOKIE, getCurrentUser } from "@/lib/session";
-import { addNoteSchema, BOOKING_SEARCH_COOKIE, bookingFiltersSchema, bookingsHref, businessIdSchema, decideBookingSchema } from "./schemas";
+import {
+  BOOKING_SEARCH_COOKIE,
+  BOOKING_SEARCH_DELETE,
+  BOOKING_SEARCH_MAX_AGE_SECONDS,
+  BOOKING_SEARCH_PATH,
+  bindSearch,
+} from "@/lib/booking-search-cookie";
+import { BUSINESS_COOKIE, getCurrentUser, resolveTenant } from "@/lib/session";
+import { addNoteSchema, bookingFiltersSchema, bookingsHref, businessIdSchema, decideBookingSchema } from "./schemas";
 import { actionTenant as tenant } from "./tenant";
 
 /** Approves, declines, cancels, completes or marks a no-show. Permission and location are checked in core. */
@@ -45,13 +52,16 @@ export async function switchBusinessAction(businessId: string): Promise<ActionRe
     if (!user) throw new AppError("unauthenticated", "Your session has ended. Sign in again to continue.", 401);
     const ctx = await getTenantContext(getDb(), user, id);
     if (!ctx) throw new AppError("not_found", "Business not found.", 404);
-    (await cookies()).set(BUSINESS_COOKIE, ctx.business.id, {
+    const jar = await cookies();
+    jar.set(BUSINESS_COOKIE, ctx.business.id, {
       httpOnly: true,
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
       path: "/",
       maxAge: 365 * 86_400,
     });
+    // The remembered search belongs to the business it was made in.
+    jar.delete(BOOKING_SEARCH_DELETE);
     revalidatePath("/dashboard", "layout");
     return null;
   });
@@ -71,13 +81,14 @@ const SEARCH_COOKIE_OPTIONS = {
   httpOnly: true,
   sameSite: "lax" as const,
   secure: process.env.NODE_ENV === "production",
-  path: "/dashboard/bookings",
+  path: BOOKING_SEARCH_PATH,
+  maxAge: BOOKING_SEARCH_MAX_AGE_SECONDS,
 };
 
 /**
  * Applies the bookings list filters. Everything but the search text goes in the
- * address; the search text, which may be a phone number, goes in a cookie so it
- * never appears in a URL or request log.
+ * address; the search text, which may be a phone number, goes in a cookie bound
+ * to this user and business so it never appears in a URL or request log.
  */
 export async function filterBookingsAction(form: FormData): Promise<void> {
   const field = (k: string) => {
@@ -93,14 +104,16 @@ export async function filterBookingsAction(form: FormData): Promise<void> {
     from: field("from"),
     to: field("to"),
   });
+  const found = await resolveTenant();
+  if (!found.ok) redirect(`/login?next=${encodeURIComponent("/dashboard/bookings")}`);
   const jar = await cookies();
-  if (f.q) jar.set(BOOKING_SEARCH_COOKIE, f.q, SEARCH_COOKIE_OPTIONS);
-  else jar.delete({ name: BOOKING_SEARCH_COOKIE, path: SEARCH_COOKIE_OPTIONS.path });
+  if (f.q) jar.set(BOOKING_SEARCH_COOKIE, bindSearch(found.ctx.user.id, found.ctx.business.id, f.q), SEARCH_COOKIE_OPTIONS);
+  else jar.delete(BOOKING_SEARCH_DELETE);
   redirect(bookingsHref(f));
 }
 
 /** Clears every bookings list filter, including the remembered search text. */
 export async function clearBookingFiltersAction(): Promise<void> {
-  (await cookies()).delete({ name: BOOKING_SEARCH_COOKIE, path: SEARCH_COOKIE_OPTIONS.path });
+  (await cookies()).delete(BOOKING_SEARCH_DELETE);
   redirect("/dashboard/bookings");
 }

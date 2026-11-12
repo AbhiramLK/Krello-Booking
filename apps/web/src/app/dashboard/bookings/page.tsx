@@ -8,10 +8,11 @@ import { PAYMENT_LABEL } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { BOOKING_SEARCH_COOKIE, parseBoundSearch } from "@/lib/booking-search-cookie";
 import { getDb } from "@/lib/db";
 import { requireTenant } from "@/lib/session";
 import { clearBookingFiltersAction, filterBookingsAction } from "../actions";
-import { BOOKING_SEARCH_COOKIE, bookingFiltersSchema, bookingsHref, firstParam } from "../schemas";
+import { bookingFiltersSchema, bookingsHref, firstParam } from "../schemas";
 import { getLocations } from "../tenant";
 
 export const dynamic = "force-dynamic";
@@ -39,7 +40,7 @@ export default async function BookingsPage({ searchParams }: { searchParams: Pro
   const raw = await searchParams;
   // The search text comes only from the cookie; a `q` in the address is ignored.
   const fromUrl = Object.fromEntries(Object.entries(raw).filter(([k]) => k !== "q").map(([k, v]) => [k, firstParam(v)]));
-  const f = bookingFiltersSchema.parse({ ...fromUrl, q: (await cookies()).get(BOOKING_SEARCH_COOKIE)?.value });
+  const f = bookingFiltersSchema.parse({ ...fromUrl, q: parseBoundSearch((await cookies()).get(BOOKING_SEARCH_COOKIE)?.value, ctx.user.id, ctx.business.id) });
   const locations = await getLocations(ctx);
   const tz = (locations.find((l) => l.id === f.location) ?? locations[0])?.timezone ?? "Asia/Kolkata";
   const from = f.from && isValidDate(f.from) ? localToInstant(f.from, 0, tz) : undefined;

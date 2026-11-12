@@ -15,6 +15,7 @@ import {
   type TenantContext,
   type UserRow,
 } from "@krello/core";
+import { BOOKING_SEARCH_DELETE } from "./booking-search-cookie";
 import { getDb } from "./db";
 
 /** Remembers which business a member with several memberships is working in. */
@@ -34,7 +35,10 @@ export async function requireUser(next: string): Promise<UserRow> {
 /** Server actions and route handlers only: cookies cannot be set while rendering. */
 export async function startSession(userId: string): Promise<void> {
   const { token, expiresAt } = await createSession(getDb(), userId);
-  (await cookies()).set(SESSION_COOKIE, token, {
+  const jar = await cookies();
+  // A search left by whoever used this browser before must not carry over.
+  jar.delete(BOOKING_SEARCH_DELETE);
+  jar.set(SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
@@ -49,6 +53,7 @@ export async function endSession(): Promise<void> {
   const token = jar.get(SESSION_COOKIE)?.value;
   if (token) await revokeSession(getDb(), token);
   jar.delete(SESSION_COOKIE);
+  jar.delete(BOOKING_SEARCH_DELETE);
 }
 
 export type TenantResolution = { ok: true; ctx: TenantContext } | { ok: false; reason: "signed_out" | "no_business" };
