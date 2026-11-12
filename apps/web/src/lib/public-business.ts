@@ -53,8 +53,8 @@ export function localBusinessJsonLd(business: PublicBusiness, location: PublicLo
     url: `${siteUrl}${path}`,
     address: {
       "@type": "PostalAddress",
-      streetAddress: location.address,
-      addressLocality: location.locality ? `${location.locality}, ${location.city}` : location.city,
+      streetAddress: `${location.address}, ${location.locality}`,
+      addressLocality: location.city,
       addressRegion: location.state,
       postalCode: location.postalCode,
       addressCountry: "IN",

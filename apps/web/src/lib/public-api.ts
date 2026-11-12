@@ -1,8 +1,8 @@
 import "server-only";
 import { NextResponse } from "next/server";
 
-const CACHE_OK = { "Cache-Control": "public, max-age=60" };
-const CACHE_ERROR = { "Cache-Control": "no-store" };
+const CACHE_OK = { "Cache-Control": "public, max-age=60", "X-Robots-Tag": "noindex" };
+const CACHE_ERROR = { "Cache-Control": "no-store", "X-Robots-Tag": "noindex" };
 
 export function jsonOk<T>(body: T) {
   return NextResponse.json(body, { headers: CACHE_OK });
