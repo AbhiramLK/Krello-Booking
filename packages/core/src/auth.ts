@@ -65,13 +65,24 @@ export interface OtpSender {
   send(phone: string, code: string): Promise<void>;
 }
 
-/** Development adapter: prints the code to the server console. */
+/** Demo adapter: prints the code to the server console, and the caller shows it on screen. */
 export const consoleOtpSender: OtpSender = {
   demo: true,
   async send(phone, code) {
     console.log(`[otp] ${phone} → ${code}`);
   },
 };
+
+/**
+ * The sender to use when the caller passes none. Demo codes are an explicit
+ * opt-in (`OTP_DEMO_MODE=1`), never a default, so a deployment that has no real
+ * sender refuses to send rather than showing a code to whoever asks. There is
+ * no real SMS sender yet; pass one to `requestOtp` when there is.
+ */
+export function defaultOtpSender(env: Record<string, string | undefined> = process.env): OtpSender {
+  if (env.OTP_DEMO_MODE === "1") return consoleOtpSender;
+  throw new AppError("otp_unavailable", "Sign-in codes cannot be sent right now. Please try again later.", 503);
+}
 
 const OTP_TTL_MS = 5 * 60_000;
 const OTP_MAX_ATTEMPTS = 5;
@@ -104,7 +115,8 @@ export async function requestOtp(
   const phone = normalisePhone(input.phone);
   if (!phone) throw new AppError("invalid_phone", "Enter a valid 10-digit Indian mobile number.", 422);
   const now = input.now ?? new Date();
-  const sender = input.sender ?? consoleOtpSender;
+  // Resolved before anything is stored, so a refused request leaves no code behind.
+  const sender = input.sender ?? defaultOtpSender();
 
   const [last] = await db
     .select()

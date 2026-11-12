@@ -75,6 +75,8 @@ try {
     DATABASE_URL: databaseUrl,
     SESSION_SECRET: process.env.SESSION_SECRET ?? "e2e-only-secret-e2e-only-secret",
     SUPER_ADMIN_PHONE: "+919000000001",
+    // The tests read the sign-in code from the on-screen demo notice.
+    OTP_DEMO_MODE: "1",
     PORT: String(appPort),
   };
 

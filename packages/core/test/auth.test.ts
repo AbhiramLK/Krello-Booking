@@ -1,6 +1,6 @@
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
-import { users } from "@krello/database";
+import { otpChallenges, users } from "@krello/database";
 import { testDb } from "../../booking-engine/test/fixtures";
 import {
   AppError,
@@ -185,6 +185,45 @@ describe("one-time codes", () => {
 
     const real = await requestOtp(db, { phone: "+919100000013", sender: capture().sender, now: T0 });
     expect(real.demoCode).toBeUndefined();
+  });
+
+  describe("when no sender is passed", () => {
+    const original = process.env.OTP_DEMO_MODE;
+    afterEach(() => {
+      if (original === undefined) delete process.env.OTP_DEMO_MODE;
+      else process.env.OTP_DEMO_MODE = original;
+    });
+
+    it("refuses to send, and stores and prints no code, with OTP_DEMO_MODE off", async () => {
+      delete process.env.OTP_DEMO_MODE;
+      const phone = "+919100000020";
+      const log = vi.spyOn(console, "log").mockImplementation(() => {});
+      try {
+        expect(await codeOf(() => requestOtp(db, { phone, now: T0 }))).toBe("otp_unavailable");
+        expect(log).not.toHaveBeenCalled();
+      } finally {
+        log.mockRestore();
+      }
+      const stored = await db.select().from(otpChallenges).where(eq(otpChallenges.phone, phone));
+      expect(stored).toHaveLength(0);
+    });
+
+    it("treats any value other than 1 as off", async () => {
+      process.env.OTP_DEMO_MODE = "true";
+      expect(await codeOf(() => requestOtp(db, { phone: "+919100000021", now: T0 }))).toBe("otp_unavailable");
+    });
+
+    it("returns the demo code with OTP_DEMO_MODE=1, unchanged from before", async () => {
+      process.env.OTP_DEMO_MODE = "1";
+      const log = vi.spyOn(console, "log").mockImplementation(() => {});
+      try {
+        const result = await requestOtp(db, { phone: "+919100000022", now: T0 });
+        expect(result.demoCode).toMatch(/^\d{6}$/);
+        expect(log).toHaveBeenCalledWith(expect.stringContaining(`+919100000022 → ${result.demoCode}`));
+      } finally {
+        log.mockRestore();
+      }
+    });
   });
 
   it("does not sign in a suspended account", async () => {
