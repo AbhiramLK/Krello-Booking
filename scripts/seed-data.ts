@@ -125,7 +125,7 @@ export const BUSINESSES: BusinessSpec[] = [
     name: "Cue Masters",
     description:
       "Full-size snooker and pool tables in the heart of Indiranagar, with a private VIP table, a snack counter and weekday coaching. A second room is open in Koramangala.",
-    contactPhone: "+918041000101",
+    contactPhone: "+919000000041",
     amenities: ["Air conditioning", "Snacks and drinks", "Coaching available", "Parking", "Lockers"],
     categories: ["snooker-pool"],
     owner: { phone: "+919000000011", name: "Vikram Shetty" },
@@ -145,7 +145,7 @@ export const BUSINESSES: BusinessSpec[] = [
         address: "14, 12th Main Road, HAL 2nd Stage",
         locality: "Indiranagar",
         postalCode: "560038",
-        phone: "+918041000101",
+        phone: "+919000000041",
         hours: [[at(11), at(23)]],
         perDay: { weekday: [2, 3], weekend: [3, 5] },
         groups: [
@@ -195,7 +195,7 @@ export const BUSINESSES: BusinessSpec[] = [
         address: "27, 80 Feet Road, 5th Block",
         locality: "Koramangala",
         postalCode: "560095",
-        phone: "+918041000102",
+        phone: "+919000000042",
         hours: [[at(11), at(23)]],
         perDay: { weekday: [0, 1], weekend: [1, 2] },
         groups: [
@@ -247,7 +247,7 @@ export const BUSINESSES: BusinessSpec[] = [
     name: "Respawn Lounge",
     description:
       "A gaming lounge in Koramangala with high-refresh gaming PCs and PlayStation 5 consoles you can book by the hour, open until midnight.",
-    contactPhone: "+918041000201",
+    contactPhone: "+919000000051",
     amenities: ["Air conditioning", "High-speed fibre internet", "Headsets provided", "Snacks and drinks", "Late opening"],
     categories: ["gaming-lounge"],
     owner: { phone: "+919000000012", name: "Neha Kulkarni" },
@@ -267,7 +267,7 @@ export const BUSINESSES: BusinessSpec[] = [
         address: "9, 1st Cross, 6th Block",
         locality: "Koramangala",
         postalCode: "560095",
-        phone: "+918041000201",
+        phone: "+919000000051",
         hours: [[at(10), DAY]],
         perDay: { weekday: [2, 3], weekend: [3, 5] },
         groups: [
@@ -335,7 +335,7 @@ export const BUSINESSES: BusinessSpec[] = [
     name: "Bluelane Aquatics",
     description:
       "A heated 25-metre pool in HSR Layout with private lap lanes, open swim and a kids session, run by certified lifeguards.",
-    contactPhone: "+918041000301",
+    contactPhone: "+919000000061",
     amenities: ["Heated pool", "Certified lifeguards", "Changing rooms", "Showers", "Parking"],
     categories: ["swimming"],
     owner: { phone: "+919000000013", name: "Arjun Bhat" },
@@ -355,7 +355,7 @@ export const BUSINESSES: BusinessSpec[] = [
         address: "41, 27th Main, Sector 1",
         locality: "HSR Layout",
         postalCode: "560102",
-        phone: "+918041000301",
+        phone: "+919000000061",
         hours: [
           [at(6), at(10)],
           [at(16), at(21)],

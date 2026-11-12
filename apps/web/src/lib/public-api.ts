@@ -1,5 +1,6 @@
 import "server-only";
 import { NextResponse } from "next/server";
+import { logUnexpected } from "./log-error";
 
 const CACHE_OK = { "Cache-Control": "public, max-age=60", "X-Robots-Tag": "noindex" };
 const CACHE_ERROR = { "Cache-Control": "no-store", "X-Robots-Tag": "noindex" };
@@ -18,7 +19,7 @@ export async function publicHandler(fn: () => Promise<NextResponse>): Promise<Ne
   try {
     return await fn();
   } catch (e) {
-    console.error(e);
+    logUnexpected("public-api", e);
     return jsonError(500, "internal", "Something went wrong. Please try again.");
   }
 }

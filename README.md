@@ -57,13 +57,15 @@ Sign in at `/login`. Owners, managers and staff land on `/dashboard`; customers 
 
 ## How the one-time code works in demo mode
 
-There is no SMS provider yet. When you ask for a code, the server prints it to the terminal where the web app runs (`[otp] +919876543210 → 123456`), and the page also shows it in a notice: "Demo mode: your code is 123456". Type it into the six boxes (you can paste all six at once). Codes last five minutes, allow five attempts, and a new one can be requested every 30 seconds. A real SMS sender replaces the console one by implementing the `OtpSender` interface in `packages/core/src/auth.ts`.
+There is no SMS provider yet, so sign-in works only while `OTP_DEMO_MODE=1` is set (it is in `.env.example`, so a fresh `.env` has it). When you ask for a code in demo mode, the server prints it to the terminal where the web app runs (`[otp] +919876543210 → 123456`), and the page also shows it in a notice: "Demo mode: your code is 123456". Type it into the six boxes (you can paste all six at once). Codes last five minutes, allow five attempts, and a new one can be requested every 30 seconds. A real SMS sender replaces the console one by implementing the `OtpSender` interface in `packages/core/src/auth.ts`.
+
+**Demo mode must be off anywhere real phone numbers are used.** In demo mode the code is shown to whoever asks for it, so anyone could sign in as any account, including an owner or the super-admin. With the flag off (unset, or anything other than `1`) and no real sender configured, asking for a code fails with "Sign-in codes cannot be sent right now" and no code is returned, printed or stored.
 
 ## The worker
 
 `pnpm worker` runs the background jobs every 15 seconds (set `WORKER_INTERVAL_MS` to change it): it expires booking requests the venue did not answer in time and releases their slots, delivers queued notifications to the in-app bell, and clears old one-time codes. `pnpm worker -- --once` runs a single cycle and exits, which is what a cloud scheduler would call. `pnpm dev:all` starts it for you.
 
-Without the worker the app still runs, but notifications are not delivered, and an overdue request is only recorded as expired when its status page is opened.
+Without the worker the app still runs, but notifications are not delivered, and an overdue request is only recorded as expired when its status page is opened. Until then (or until the worker next runs) an overdue request keeps its slot on hold and still counts toward the customer's limit of pending requests.
 
 ## Tests
 
@@ -75,7 +77,7 @@ pnpm e2e         # one end-to-end booking journey in a real browser (Playwright)
 
 `pnpm e2e` builds the web app, then serves it on a free port against its own freshly seeded throwaway database. It never touches the development database. Every run builds the app first, which takes a few minutes; set `E2E_SKIP_BUILD=1` to reuse the previous build when you have only changed the test.
 
-It drives the installed Microsoft Edge, so nothing needs downloading. Pick another browser with the `PW_CHANNEL` environment variable:
+It drives the installed Microsoft Edge, so nothing needs downloading. On a machine without Microsoft Edge you must set `PW_CHANNEL` to a browser that is installed, or the run cannot start. Pick the browser with the `PW_CHANNEL` environment variable:
 
 ```bash
 PW_CHANNEL=chrome pnpm e2e         # Google Chrome

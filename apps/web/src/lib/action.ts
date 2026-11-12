@@ -2,6 +2,7 @@ import "server-only";
 import { unstable_rethrow } from "next/navigation";
 import { AppError } from "@krello/core";
 import { EngineError } from "@krello/booking-engine";
+import { logUnexpected } from "./log-error";
 
 export type ActionResult<T> = { ok: true; data: T } | { ok: false; code: string; message: string };
 
@@ -23,7 +24,7 @@ export async function runAction<T>(fn: () => Promise<T>): Promise<ActionResult<T
     unstable_rethrow(e);
     if (e instanceof EngineError || e instanceof AppError) return { ok: false, code: e.code, message: e.message };
     if (isZodError(e)) return { ok: false, code: "validation", message: e.issues[0]?.message ?? "Check the details and try again." };
-    console.error(e);
+    logUnexpected("action", e);
     return { ok: false, code: "internal", message: INTERNAL_MESSAGE };
   }
 }

@@ -19,7 +19,7 @@ the note under each says how costly a change would be.
 | OD-07 | Manual extension of pending expiry | Not built | Low to add |
 | OD-08 | Slot crossing a price boundary | Split by time segment and sum | Medium |
 | OD-09 | Reviews | 1–5 stars, tied to location, no edits after posting | Low |
-| OD-10 | OTP provider | Adapter interface; development adapter prints the code to the server console. No SMS provider chosen | Low: add an adapter |
+| OD-10 | OTP provider | Adapter interface; development adapter prints the code to the server console and shows it on screen, and only when `OTP_DEMO_MODE=1` is set; with the flag off and no real sender, requesting a code is refused. No SMS provider chosen | Low: add an adapter |
 | OD-11 | Browser push | Standard Web Push (VAPID) via the `web-push` library | Low |
 | OD-12 | Backend framework | Domain logic in shared packages, served by Next.js route handlers and server actions | Medium |
 | OD-13 | ORM | Drizzle, with hand-written SQL for integrity constraints | High |
@@ -55,3 +55,16 @@ the note under each says how costly a change would be.
   snooker hall, a gaming lounge and a swimming pool, with fictional customers,
   bookings, payments and reviews.
 - **Look.** Apple-like, light theme by default.
+
+## Open decisions awaiting the owner
+
+- **Who sees the Payments report. Awaiting the owner's decision.** The
+  Payments page (booking value, amount collected, outstanding and totals by
+  method, for up to 366 days) is gated on `payments.record`, which staff hold.
+  So staff can currently see this report for the locations they are assigned
+  to. The spec (section 3.2) gives staff "limited" analytics and keeps all
+  financial records for the owner, so this may be more than intended. The
+  alternative is to gate the report summary on `analytics.view` (owner and
+  manager) and keep the per-booking payment ledger, which staff need in order
+  to record payments, on `payments.record`. Changing it is small: one
+  permission check on the page and its data loader.

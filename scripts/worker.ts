@@ -3,7 +3,7 @@
  *
  * Each cycle it
  *   1. expires pending requests whose deadline has passed (releasing their slots),
- *   2. delivers queued notifications (in-app, and browser pushes where configured),
+ *   2. delivers queued notifications to the in-app bell (browser pushes are not built),
  *   3. deletes one-time codes and rate-limit counters that are long out of date.
  *
  *   pnpm worker            loop forever, one cycle every WORKER_INTERVAL_MS (default 15000)

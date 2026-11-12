@@ -29,10 +29,10 @@
 - Money: integer paise in code, shown with `formatInr`. Currency INR, language English, timezone shown from the location (seeded `Asia/Kolkata`).
 - Booking status pages (`/booking/*`), `/account/*`, `/dashboard/*`, `/api/*` are `noindex` and excluded from `robots.txt` allow rules. Marketplace and business pages are server-rendered with title, description, canonical URL and Open Graph tags.
 - Every form and page has loading, empty, error and success states, labelled inputs, and keyboard-reachable controls. Layouts work at 360 px width.
-- Look: Apple-like, light. Tokens: background `#f5f5f7`, card `#ffffff`, ink `#1d1d1f`, secondary text `#6e6e73`, hairline `rgba(0,0,0,.08)`, green `#34c759`, orange `#ff9f0a`, blue `#0071e3`, red `#ff3b30`; card radius 18px; font stack `-apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", "Segoe UI", sans-serif`; tabular numerals for money and times. For marketplace pages also read `C:\Users\lykos\.agents\skills\design-taste-frontend\SKILL.md` and follow it where it applies.
+- Look: Apple-like, light. Tokens: background `#f5f5f7`, card `#ffffff`, ink `#1d1d1f`, secondary text `#6e6e73`, hairline `rgba(0,0,0,.08)`, green `#34c759`, orange `#ff9f0a`, blue `#0071e3`, red `#ff3b30`; card radius 18px; font stack `-apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", "Segoe UI", sans-serif`; tabular numerals for money and times. For marketplace pages also follow the `design-taste-frontend` design skill where it applies.
 - No Redis, no microservices, no in-memory timers for expiry.
 - Create files with your file-writing tool, not shell heredocs (the shell here mishandles apostrophes in heredocs).
-- Commit after each task with a message ending `Co-Authored-By: Claude Fable 5.2 <noreply@anthropic.com>`. Use `git -C "D:/Booking Pagee"`; never run git from `D:\`.
+- Commit after each task with a message ending `Co-Authored-By: Claude Fable 5.2 <noreply@anthropic.com>`. Run git from inside the repository folder only (use `git -C <repo folder>`); never run it from the parent drive root, which is a separate repository.
 
 ## Review Focus
 
