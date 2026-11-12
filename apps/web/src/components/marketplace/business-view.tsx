@@ -52,7 +52,7 @@ export async function BusinessView({ business, location, path }: { business: Pub
 
       <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1fr)_24rem] lg:gap-12">
         {/* Booking comes right after the heading on a phone, and sits beside the details on a wide screen. */}
-        <div className="lg:col-start-2 lg:row-start-1 lg:self-start lg:sticky lg:top-20">
+        <div className="min-w-0 lg:col-start-2 lg:row-start-1 lg:self-start lg:sticky lg:top-20">
           <BookingPanel business={business} initialLocationId={location.id} />
         </div>
 

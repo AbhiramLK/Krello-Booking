@@ -9,6 +9,8 @@ loadEnvConfig(path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../.."
 const nextConfig: NextConfig = {
   transpilePackages: ["@krello/core", "@krello/booking-engine", "@krello/database", "@krello/pricing"],
   serverExternalPackages: ["postgres"],
+  // Booking status paths hold a secret token; keep them out of the request log.
+  logging: { incomingRequests: { ignore: [/^\/booking\//, /^\/api\/booking-status\//] } },
   async headers() {
     // Booking status URLs carry a secret token: keep it out of Referer headers, search engines and caches.
     const secret = [

@@ -264,7 +264,11 @@ export function BookingPanel({ business, initialLocationId }: BookingPanelProps)
   const canContinue = !!selection && quote.status === "ready";
 
   return (
-    <section aria-labelledby="book-heading" className="rounded-card border bg-card p-4 shadow-sm sm:p-6">
+    <section
+      aria-labelledby="book-heading"
+      // The panel is sticky beside the page on wide screens; it scrolls inside itself so Continue is always reachable.
+      className="rounded-card border bg-card p-4 shadow-sm sm:p-6 lg:max-h-[calc(100dvh-6rem)] lg:overflow-y-auto lg:overscroll-contain"
+    >
       <div className="flex items-center gap-2">
         {step === "details" && (
           <Button type="button" variant="ghost" size="icon-sm" className="-ml-2 rounded-full" aria-label="Back to slots" onClick={() => setStep("pick")}>
@@ -345,8 +349,9 @@ export function BookingPanel({ business, initialLocationId }: BookingPanelProps)
         </div>
       )}
 
-      {step === "details" && selection && instants && (
-        <div className="mt-4 flex flex-col gap-4">
+      {/* Stays mounted on the slot step, so a half-finished phone check survives a trip back to the grid. */}
+      <div hidden={step !== "details"} className="mt-4 flex-col gap-4 [&:not([hidden])]:flex">
+        {selection && instants && (
           <BookingSummary
             startsAt={instants.startsAt}
             endsAt={instants.endsAt}
@@ -356,21 +361,21 @@ export function BookingPanel({ business, initialLocationId }: BookingPanelProps)
             holdMinutes={business.policy.pendingHoldMinutes}
             policyLines={business.policyLines}
           />
-          <DetailsStep
-            user={user}
-            contact={contact}
-            onContactChange={setContact}
-            submitting={submitting}
-            error={submitError}
-            onSubmit={() => void submit()}
-            onVerified={(u) => {
-              setUser(u);
-              setSubmitError(null);
-              void submit();
-            }}
-          />
-        </div>
-      )}
+        )}
+        <DetailsStep
+          user={user}
+          contact={contact}
+          onContactChange={setContact}
+          submitting={submitting}
+          error={submitError}
+          onSubmit={() => void submit()}
+          onVerified={(u) => {
+            setUser(u);
+            setSubmitError(null);
+            void submit();
+          }}
+        />
+      </div>
 
       <Dialog open={!!pendingReplace} onOpenChange={(open) => !open && setPendingReplace(null)}>
         <DialogContent className="sm:max-w-md">

@@ -32,23 +32,50 @@ function slotLength(r: ResourceAvailability): number | null {
   return s ? s.endMinute - s.startMinute : null;
 }
 
-/** Resources down the side, slot start times across. Scrolls sideways on small screens. */
+/** Width of one hour on the grid, in pixels. */
+const HOUR_PX = 84;
+
+const gcd = (a: number, b: number): number => (b ? gcd(b, a % b) : a);
+
+/**
+ * Columns for the grid. Normally time runs across in proportion, so a 90-minute
+ * slot is half as wide again as a 60-minute one and back-to-back slots touch.
+ * When a resource offers overlapping slots that cannot work, so each distinct
+ * start time gets a column instead.
+ */
+function gridLayout(resources: ResourceAvailability[]): { template: string; column: (s: SlotView) => string } {
+  const all = resources.flatMap((r) => r.slots);
+  const origin = Math.min(...all.map((s) => s.startMinute));
+  const end = Math.max(...all.map((s) => s.endMinute));
+  const overlapping = resources.some((r) => r.slots.some((s, i) => i > 0 && s.startMinute < r.slots[i - 1]!.endMinute));
+  const unit = all.reduce((u, s) => gcd(gcd(u, s.startMinute - origin), s.endMinute - s.startMinute), 0);
+  if (!overlapping && unit >= 5 && (end - origin) / unit <= 400) {
+    return {
+      template: `repeat(${(end - origin) / unit}, ${((HOUR_PX * unit) / 60).toFixed(2)}px)`,
+      column: (s) => `${(s.startMinute - origin) / unit + 2} / span ${(s.endMinute - s.startMinute) / unit}`,
+    };
+  }
+  const starts = [...new Set(all.map((s) => s.startMinute))].sort((a, b) => a - b);
+  return { template: `repeat(${starts.length}, ${HOUR_PX}px)`, column: (s) => `${starts.indexOf(s.startMinute) + 2}` };
+}
+
+/** Resources down the side, slot times across. Scrolls sideways on small screens. */
 export function SlotGrid({ resources, selection, groupSize, onSlot }: SlotGridProps) {
-  const columns = [...new Set(resources.flatMap((r) => r.slots.map((s) => s.startMinute)))].sort((a, b) => a - b);
+  const { template, column } = gridLayout(resources);
 
   return (
-    <div className="-mx-4 overflow-x-auto px-4 pb-2 [scrollbar-width:thin] sm:-mx-6 sm:px-6">
+    <div className="overflow-x-auto pb-2 [scrollbar-width:thin]">
       <div
         role="table"
         aria-label="Available slots"
-        className="grid w-max gap-1.5"
-        style={{ gridTemplateColumns: `minmax(6.5rem, 7.5rem) repeat(${columns.length}, 5.25rem)` }}
+        className="grid w-max gap-y-1.5"
+        style={{ gridTemplateColumns: `minmax(6.5rem, 7.5rem) ${template}` }}
       >
-        {resources.map((r) => {
+        {resources.map((r, row) => {
           const length = slotLength(r);
           return (
             <div key={r.resourceId} role="row" className="contents">
-              <div role="rowheader" className="sticky left-0 z-10 flex flex-col justify-center bg-card pr-2">
+              <div role="rowheader" style={{ gridRow: row + 1, gridColumn: 1 }} className="sticky left-0 z-10 flex flex-col justify-center bg-card pr-2">
                 <span className="truncate text-sm font-medium" title={r.name}>
                   {r.name}
                 </span>
@@ -57,15 +84,11 @@ export function SlotGrid({ resources, selection, groupSize, onSlot }: SlotGridPr
                   {r.pricePerPerson && <span className="block">Price per person</span>}
                 </span>
               </div>
-              {columns.map((minute) => {
-                const slot = r.slots.find((s) => s.startMinute === minute);
-                if (!slot) return <div key={minute} role="cell" aria-hidden="true" />;
-                return (
-                  <div key={minute} role="cell">
-                    <SlotButton resource={r} slot={slot} groupSize={groupSize} selected={isSelected(selection, r, slot, groupSize)} onClick={() => onSlot(r, slot)} />
-                  </div>
-                );
-              })}
+              {r.slots.map((slot) => (
+                <div key={`${slot.startMinute}-${slot.endMinute}`} role="cell" style={{ gridRow: row + 1, gridColumn: column(slot) }} className="px-[3px]">
+                  <SlotButton resource={r} slot={slot} groupSize={groupSize} selected={isSelected(selection, r, slot, groupSize)} onClick={() => onSlot(r, slot)} />
+                </div>
+              ))}
             </div>
           );
         })}
