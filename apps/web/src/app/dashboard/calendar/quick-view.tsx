@@ -7,11 +7,11 @@ import { Ban, ExternalLink, Phone, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PaymentBadge, StatusBadge } from "@/components/status-badge";
-import { formatInr, formatRange, formatTime, minuteLabel } from "@/lib/format";
+import { formatInr, formatRange, minuteLabel } from "@/lib/format";
 import { unblockResourceAction } from "./actions";
 import { blocksInSlot, bookingsInSlot, placesTaken } from "./geometry";
 import type { BlockView, BookingView, DayView } from "./view-model";
-import { isConfirmed, SOURCE_WORD } from "./words";
+import { isConfirmed, slotBookingLine, SOURCE_WORD } from "./words";
 
 export type QuickTarget =
   | { kind: "booking"; id: string }
@@ -187,7 +187,7 @@ export function QuickView({
                 <span className="min-w-0">
                   <span className="block truncate font-medium">{b.customerName}</span>
                   <span className="tabular block text-sm text-muted-foreground">
-                    {b.items.find((i) => i.resourceId === resource.id)?.units ?? 1} places · {formatTime(b.startsAt, tz)} – {formatTime(b.endsAt, tz)} · {b.status === "pending" ? "Pending" : "Confirmed"}
+                    {slotBookingLine(b, resource.id, tz)}
                   </span>
                 </span>
                 <Link href={`/dashboard/bookings/${b.id}`} className="shrink-0 text-sm font-medium text-primary hover:underline">

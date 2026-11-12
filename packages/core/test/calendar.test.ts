@@ -82,6 +82,28 @@ describe("manual bookings", () => {
     expect(e.message).toContain("Table 1");
   });
 
+  it("refuses the online source: manual entry is for phone, walk-in and venue bookings", async () => {
+    const t = await makeTeam(db);
+    const { v } = t;
+    const e = await rejectsWith(
+      createManualBooking(db, t.owner, {
+        locationId: v.locationId,
+        resourceIds: [v.tables[0]!],
+        startsAt: v.at(14),
+        endsAt: v.at(15),
+        source: "online" as never,
+        name: "Sneaky",
+        phone: "9876543210",
+        groupSize: 2,
+        idempotencyKey: key(),
+      }),
+      AppError,
+      "validation",
+    );
+    expect((e as AppError).status).toBe(422);
+    expect(await db.select().from(bookings).where(eq(bookings.locationId, v.locationId))).toEqual([]);
+  });
+
   it("repeats a submission with the same key without booking twice", async () => {
     const t = await makeTeam(db);
     const { v } = t;
@@ -257,7 +279,7 @@ describe("blocks", () => {
     expect(e.message).toMatch(/1 booking overlap/);
   });
 
-  it("leaves a staff member out of resources at locations they do not have", async () => {
+  it("checks the member's locations for a resource or block, even when the role may manage blocks", async () => {
     const t = await makeTeam(db);
     // Even the permission-holding manager is checked per location; the restricted staff member never gets this far.
     const restrictedManager = { ...t.manager, canAccessLocation: (id: string) => id === t.v.locationId };
@@ -429,6 +451,27 @@ describe("getCalendarDay", () => {
     const shared = day.bookings.find((b) => b.id === swim.booking.id)!;
     expect(shared.items).toEqual([{ resourceId: v.session, name: "Open swim", units: 3 }]);
     expect(day.bookings.find((b) => b.id === online.booking.id)!.status).toBe("pending");
+  });
+
+  it("reports a request past its deadline as expired while it still holds the slot", async () => {
+    const t = await makeTeam(db);
+    const { v } = t;
+    const placed = await createBooking(db, {
+      locationId: v.locationId,
+      resourceIds: [v.tables[0]!],
+      startsAt: v.at(18),
+      endsAt: v.at(19),
+      groupSize: 2,
+      customer: customer(),
+      source: "online",
+      actor: CUSTOMER,
+    });
+    const deadline = placed.booking.pendingExpiresAt!;
+    const status = async (now: Date) =>
+      (await getCalendarDay(db, t.owner, { locationId: v.locationId, date: v.date }, { now })).bookings.find((b) => b.id === placed.booking.id)?.status;
+    expect(await status(new Date(deadline.getTime() - 60_000))).toBe("pending");
+    // The expiry job has not run, so the booking is still listed, but it no longer reads as awaiting an answer.
+    expect(await status(new Date(deadline.getTime() + 60_000))).toBe("expired");
   });
 
   it("keeps completed and no-show bookings on the day", async () => {

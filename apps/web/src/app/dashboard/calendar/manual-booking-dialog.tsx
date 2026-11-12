@@ -72,7 +72,7 @@ export function ManualBookingDialog(props: ManualBookingDialogProps) {
 }
 
 function ManualBookingForm({ onOpenChange, day, initial, onSaved, onStale }: ManualBookingDialogProps) {
-  const ids = { resource: useId(), start: useId(), length: useId(), people: useId(), name: useId(), phone: useId(), notes: useId(), err: useId(), phoneErr: useId(), peopleErr: useId() };
+  const ids = { resource: useId(), start: useId(), length: useId(), people: useId(), name: useId(), phone: useId(), notes: useId(), err: useId(), phoneErr: useId(), peopleErr: useId(), notesHint: useId() };
 
   const withSlots = day.resources.filter((r) => r.slots.length > 0);
   const [resourceId, setResourceId] = useState(() => initial?.resourceId ?? withSlots.find((r) => openSlots(r, 1).length > 0)?.id ?? withSlots[0]?.id ?? "");
@@ -328,8 +328,20 @@ function ManualBookingForm({ onOpenChange, day, initial, onSaved, onStale }: Man
           )}
         </div>
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor={ids.notes}>Notes (optional)</Label>
-          <Textarea id={ids.notes} value={notes} maxLength={500} rows={2} disabled={saving} onChange={(e) => setNotes(e.target.value)} className="bg-card" />
+          <Label htmlFor={ids.notes}>Customer&apos;s notes (optional)</Label>
+          <Textarea
+            id={ids.notes}
+            value={notes}
+            maxLength={500}
+            rows={2}
+            disabled={saving}
+            onChange={(e) => setNotes(e.target.value)}
+            aria-describedby={ids.notesHint}
+            className="bg-card"
+          />
+          <p id={ids.notesHint} className="text-xs text-muted-foreground">
+            What the customer asked for. Your own remarks go in Notes on the booking page.
+          </p>
         </div>
       </div>
 
