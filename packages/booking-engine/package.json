@@ -5,7 +5,12 @@
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
-  "exports": { ".": "./src/index.ts", "./labels": "./src/labels.ts" },
+  "exports": {
+    ".": "./src/index.ts",
+    "./labels": "./src/labels.ts",
+    "./slots": "./src/slots.ts",
+    "./time": "./src/time.ts"
+  },
   "scripts": { "typecheck": "tsc --noEmit -p ." },
   "dependencies": {
     "@krello/database": "workspace:*",

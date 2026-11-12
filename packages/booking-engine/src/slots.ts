@@ -1,4 +1,4 @@
-/** Fixed-slot generation. Pure: works on minutes from local midnight. */
+/** Fixed-slot generation. Pure: works on minutes from local midnight. Browser code may import `@krello/booking-engine/slots`. */
 
 export interface Slot {
   startMinute: number;

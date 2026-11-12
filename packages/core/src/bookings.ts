@@ -12,6 +12,7 @@ import {
   type DbOrTx,
 } from "@krello/database";
 import { describePolicy, hashToken, resolvePolicy, type BookingRow, type BookingStatus } from "@krello/booking-engine";
+import { effectiveStatus } from "./requests";
 
 const TOKEN_LIFETIME_AFTER_END_MS = 30 * 86_400_000;
 
@@ -60,15 +61,17 @@ async function toCustomerView(db: DbOrTx, b: BookingRow, now: Date) {
     db.select({ id: reviews.id, rating: reviews.rating, body: reviews.body }).from(reviews).where(eq(reviews.bookingId, b.id)),
   ]);
   const policy = resolvePolicy(venue?.policy);
+  // An overdue request reads as expired, and can no longer be cancelled, before the worker records it.
+  const status = effectiveStatus(b, now);
   const cancelDeadline = new Date(b.startsAt.getTime() - policy.cancellationDeadlineMinutes * 60000);
   const canCancel =
-    (b.status === "pending" && policy.customerCanCancelPending) ||
-    (b.status === "approved" && policy.customerCanCancelApproved && now.getTime() <= cancelDeadline.getTime());
+    (status === "pending" && policy.customerCanCancelPending) ||
+    (status === "approved" && policy.customerCanCancelApproved && now.getTime() <= cancelDeadline.getTime());
 
   return {
     id: b.id,
     reference: b.publicReference,
-    status: b.status,
+    status,
     source: b.source,
     customerName: b.customerName,
     groupSize: b.groupSize,
@@ -92,7 +95,7 @@ async function toCustomerView(db: DbOrTx, b: BookingRow, now: Date) {
     items: allocs.map((a) => ({ name: a.resourceName, type: a.resourceType, units: a.units })),
     policyLines: describePolicy(policy),
     canCancel,
-    cancelDeadline: b.status === "approved" && policy.customerCanCancelApproved ? cancelDeadline : null,
+    cancelDeadline: status === "approved" && policy.customerCanCancelApproved ? cancelDeadline : null,
     cancellationReasonRequired: policy.cancellationReasonRequired,
     canReview: b.status === "completed" && !review,
     review: review ?? null,
@@ -116,12 +119,13 @@ export async function getCustomerBooking(db: DbOrTx, userId: string, bookingId: 
   return b ? { booking: b, view: await toCustomerView(db, b, now) } : null;
 }
 
-export async function listCustomerBookings(db: DbOrTx, userId: string) {
+export async function listCustomerBookings(db: DbOrTx, userId: string, now = new Date()) {
   const rows = await db
     .select({
       id: bookings.id,
       reference: bookings.publicReference,
       status: bookings.status,
+      pendingExpiresAt: bookings.pendingExpiresAt,
       startsAt: bookings.startsAt,
       endsAt: bookings.endsAt,
       totalAmount: bookings.totalAmount,
@@ -139,7 +143,11 @@ export async function listCustomerBookings(db: DbOrTx, userId: string) {
     .orderBy(desc(bookings.startsAt))
     .limit(200);
   const allocs = await allocationsFor(db, rows.map((r) => r.id));
-  return rows.map((r) => ({ ...r, items: allocs.filter((a) => a.bookingId === r.id).map((a) => a.resourceName) }));
+  return rows.map((r) => ({
+    ...r,
+    status: effectiveStatus(r, now),
+    items: allocs.filter((a) => a.bookingId === r.id).map((a) => a.resourceName),
+  }));
 }
 
 /* ---------- business side ---------- */

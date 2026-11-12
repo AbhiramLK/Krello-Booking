@@ -12,12 +12,13 @@ import {
   writeAudit,
   type Actor,
   type Db,
+  type DbOrTx,
   type Tx,
 } from "@krello/database";
 import { calculatePrice, PricingError, type PriceResult } from "@krello/pricing";
 import { STATUS_LABEL, type BookingStatus as LabelStatus } from "./labels";
 import { evaluateInterval } from "./availability";
-import { getTenantAccess, loadDayContext, type DayContext } from "./context";
+import { getTenantAccess, loadDayContext, type DayContext, type LocationRow } from "./context";
 import { EngineError } from "./errors";
 import { resolvePolicy } from "./policy";
 import { chainSlots } from "./slots";
@@ -98,7 +99,7 @@ function newStatusToken(): { token: string; hash: string } {
 
 /** Finds which schedule date the interval belongs to and validates the slots. */
 async function resolveDay(
-  tx: Tx,
+  tx: DbOrTx,
   locationId: string,
   timezone: string,
   resourceIds: string[],
@@ -120,6 +121,138 @@ async function resolveDay(
   throw new EngineError("validation", "That time is not a bookable slot.");
 }
 
+interface SelectionInput {
+  resourceIds: string[];
+  startsAt: Date;
+  endsAt: Date;
+  groupSize: number;
+}
+
+/**
+ * Checks the shape of a request before anything is read. Returns the resource
+ * ids, de-duplicated and sorted. Pass `customerName` to require a name too.
+ */
+function validateSelection(input: SelectionInput, customerName?: string): string[] {
+  const resourceIds = [...new Set(input.resourceIds)].sort();
+  if (!resourceIds.length) throw new EngineError("validation", "Choose at least one item to book.");
+  if (resourceIds.length > 20) throw new EngineError("validation", "Too many items in one booking.");
+  if (customerName !== undefined && !customerName) throw new EngineError("validation", "A customer name is required.");
+  if (!Number.isInteger(input.groupSize) || input.groupSize < 1 || input.groupSize > 500) {
+    throw new EngineError("validation", "Group size must be a whole number of at least 1.");
+  }
+  if (!(input.endsAt.getTime() > input.startsAt.getTime())) {
+    throw new EngineError("validation", "The booking must end after it starts.");
+  }
+  return resourceIds;
+}
+
+/**
+ * Checks every resource is free for the whole interval and prices it. The one
+ * code path for both a quote and a real booking, so they cannot disagree.
+ * `snapshot.allocations[i]` belongs to `ctx.resources[i]`.
+ */
+async function priceSelection(
+  tx: DbOrTx,
+  loc: LocationRow,
+  resourceIds: string[],
+  input: SelectionInput,
+  now: Date,
+  audience: "customer" | "business",
+): Promise<{ ctx: DayContext; snapshot: BookingPriceSnapshot }> {
+  const { ctx, startMinute, endMinute } = await resolveDay(tx, loc.id, loc.timezone, resourceIds, input.startsAt, input.endsAt);
+
+  const exclusiveCapacity = ctx.resources
+    .filter((r) => r.bookingMode === "exclusive")
+    .reduce((n, r) => n + r.capacity, 0);
+  const allExclusive = ctx.resources.every((r) => r.bookingMode === "exclusive");
+  if (allExclusive && ctx.resources.some((r) => r.capacity > 1) && input.groupSize > exclusiveCapacity) {
+    throw new EngineError("validation", `That selection fits up to ${exclusiveCapacity} people.`);
+  }
+
+  const snapshots: AllocationSnapshot[] = [];
+  for (const r of ctx.resources) {
+    const units = r.bookingMode === "shared" ? input.groupSize : 1;
+    const ev = evaluateInterval(ctx, r, input.startsAt, input.endsAt, now, audience);
+    if (ev.state !== "available" || ev.remaining < units) {
+      const why =
+        ev.state === "unavailable"
+          ? (ev.note ?? "it cannot be booked")
+          : ev.state === "blocked"
+            ? "it is blocked for that time"
+            : ev.state === "available"
+              ? `only ${ev.remaining} place${ev.remaining === 1 ? " is" : "s are"} left`
+              : "someone else has just taken it";
+      throw new EngineError(
+        ev.state === "unavailable" ? "validation" : "slot_conflict",
+        `${r.name} is not available: ${why}.`,
+        { resourceId: r.id, state: ev.state, remaining: ev.remaining },
+      );
+    }
+    let price: PriceResult;
+    try {
+      price = calculatePrice(
+        {
+          resourceId: r.id,
+          priceUnit: r.priceUnit,
+          pricePerPerson: r.pricePerPerson,
+          slotDurationMinutes: ctx.slotDuration.get(r.id) ?? 60,
+          date: ctx.date,
+          dayOfWeek: ctx.dayOfWeek,
+          startMinute,
+          endMinute,
+          groupSize: input.groupSize,
+        },
+        ctx.rules,
+      );
+    } catch (e) {
+      if (e instanceof PricingError) throw new EngineError("validation", `${r.name}: ${e.message}`);
+      throw e;
+    }
+    snapshots.push({
+      resourceId: r.id,
+      resourceName: r.name,
+      startsAt: input.startsAt.toISOString(),
+      endsAt: input.endsAt.toISOString(),
+      units,
+      price,
+    });
+  }
+
+  return {
+    ctx,
+    snapshot: {
+      currency: "INR",
+      date: ctx.date,
+      groupSize: input.groupSize,
+      allocations: snapshots,
+      total: snapshots.reduce((n, s) => n + s.price.total, 0),
+    },
+  };
+}
+
+export interface QuoteBookingInput extends SelectionInput {
+  locationId: string;
+  now?: Date;
+}
+
+/**
+ * Prices an online request without booking anything, by the same checks and
+ * rules `createBooking` applies. Throws the same `EngineError` it would, for
+ * example `slot_conflict` when a slot has just been taken.
+ */
+export async function quoteBooking(db: DbOrTx, input: QuoteBookingInput): Promise<BookingPriceSnapshot> {
+  const now = input.now ?? new Date();
+  const resourceIds = validateSelection(input);
+  const [loc] = await db.select().from(locations).where(eq(locations.id, input.locationId));
+  if (!loc || loc.status !== "active") throw new EngineError("not_found", "Location not found.");
+  const access = await getTenantAccess(db, loc.businessId);
+  if (!access.publicBookable) {
+    throw new EngineError("not_bookable", "This venue is not taking online bookings right now.");
+  }
+  const { snapshot } = await priceSelection(db, loc, resourceIds, input, now, "customer");
+  return snapshot;
+}
+
 /**
  * Creates a booking and all of its allocations in one transaction.
  *
@@ -133,19 +266,9 @@ async function resolveDay(
  */
 export async function createBooking(db: Db, input: CreateBookingInput): Promise<CreateBookingResult> {
   const now = input.now ?? new Date();
-  const resourceIds = [...new Set(input.resourceIds)].sort();
-  const name = input.customer.name?.trim();
+  const name = input.customer.name?.trim() ?? "";
   const phone = input.customer.phone?.trim() || null;
-
-  if (!resourceIds.length) throw new EngineError("validation", "Choose at least one item to book.");
-  if (resourceIds.length > 20) throw new EngineError("validation", "Too many items in one booking.");
-  if (!name) throw new EngineError("validation", "A customer name is required.");
-  if (!Number.isInteger(input.groupSize) || input.groupSize < 1 || input.groupSize > 500) {
-    throw new EngineError("validation", "Group size must be a whole number of at least 1.");
-  }
-  if (!(input.endsAt.getTime() > input.startsAt.getTime())) {
-    throw new EngineError("validation", "The booking must end after it starts.");
-  }
+  const resourceIds = validateSelection(input, name);
   const online = input.source === "online";
   if (online && !phone) throw new EngineError("validation", "A verified phone number is required.");
 
@@ -206,80 +329,9 @@ export async function createBooking(db: Db, input: CreateBookingInput): Promise<
         if (existing) return replay(tx, existing);
       }
 
-      const { ctx, startMinute, endMinute } = await resolveDay(
-        tx,
-        loc.id,
-        loc.timezone,
-        resourceIds,
-        input.startsAt,
-        input.endsAt,
-      );
-
-      const exclusiveCapacity = ctx.resources
-        .filter((r) => r.bookingMode === "exclusive")
-        .reduce((n, r) => n + r.capacity, 0);
-      const allExclusive = ctx.resources.every((r) => r.bookingMode === "exclusive");
-      if (allExclusive && ctx.resources.some((r) => r.capacity > 1) && input.groupSize > exclusiveCapacity) {
-        throw new EngineError("validation", `That selection fits up to ${exclusiveCapacity} people.`);
-      }
-
-      const snapshots: AllocationSnapshot[] = [];
-      for (const r of ctx.resources) {
-        const units = r.bookingMode === "shared" ? input.groupSize : 1;
-        const ev = evaluateInterval(ctx, r, input.startsAt, input.endsAt, now, online ? "customer" : "business");
-        if (ev.state !== "available" || ev.remaining < units) {
-          const why =
-            ev.state === "unavailable"
-              ? (ev.note ?? "it cannot be booked")
-              : ev.state === "blocked"
-                ? "it is blocked for that time"
-                : ev.state === "available"
-                  ? `only ${ev.remaining} place${ev.remaining === 1 ? " is" : "s are"} left`
-                  : "someone else has just taken it";
-          throw new EngineError(
-            ev.state === "unavailable" ? "validation" : "slot_conflict",
-            `${r.name} is not available: ${why}.`,
-            { resourceId: r.id, state: ev.state, remaining: ev.remaining },
-          );
-        }
-        let price: PriceResult;
-        try {
-          price = calculatePrice(
-            {
-              resourceId: r.id,
-              priceUnit: r.priceUnit,
-              pricePerPerson: r.pricePerPerson,
-              slotDurationMinutes: ctx.slotDuration.get(r.id) ?? 60,
-              date: ctx.date,
-              dayOfWeek: ctx.dayOfWeek,
-              startMinute,
-              endMinute,
-              groupSize: input.groupSize,
-            },
-            ctx.rules,
-          );
-        } catch (e) {
-          if (e instanceof PricingError) throw new EngineError("validation", `${r.name}: ${e.message}`);
-          throw e;
-        }
-        snapshots.push({
-          resourceId: r.id,
-          resourceName: r.name,
-          startsAt: input.startsAt.toISOString(),
-          endsAt: input.endsAt.toISOString(),
-          units,
-          price,
-        });
-      }
-
-      const total = snapshots.reduce((n, s) => n + s.price.total, 0);
-      const snapshot: BookingPriceSnapshot = {
-        currency: "INR",
-        date: ctx.date,
-        groupSize: input.groupSize,
-        allocations: snapshots,
-        total,
-      };
+      const { ctx, snapshot } = await priceSelection(tx, loc, resourceIds, input, now, online ? "customer" : "business");
+      const snapshots = snapshot.allocations;
+      const total = snapshot.total;
       const policy = resolvePolicy(ctx.business.policy);
       const status: BookingStatus = online ? "pending" : "approved";
       // A hold never outlives the start of the slot it is holding.

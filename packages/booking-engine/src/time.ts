@@ -1,4 +1,7 @@
-/** Timezone helpers built on Intl, so no date library is needed. */
+/**
+ * Timezone helpers built on Intl, so no date library is needed. Pure: no Node
+ * or database imports, so browser code may import `@krello/booking-engine/time`.
+ */
 
 const fmtCache = new Map<string, Intl.DateTimeFormat>();
 
