@@ -1,9 +1,29 @@
 import { describe, expect, it } from "vitest";
-import { countdown, formatDay, formatDayLong, formatInr, formatMonthYear, formatRange, formatTime, minuteLabel, priceLabel } from "./format";
+import {
+  countdown,
+  durationLabel,
+  formatDay,
+  formatDayLong,
+  formatInr,
+  formatMonthYear,
+  formatRange,
+  formatTime,
+  minuteLabel,
+  priceLabel,
+  timeZoneName,
+} from "./format";
 
 const tz = "Asia/Kolkata";
 
 describe("format", () => {
+  it("names the timezone and durations", () => {
+    expect(timeZoneName("2026-11-14T14:00:00Z", tz)).toBe("India Standard Time");
+    expect(durationLabel(30)).toBe("30 minutes");
+    expect(durationLabel(60)).toBe("1 hour");
+    expect(durationLabel(90)).toBe("1 h 30 min");
+    expect(durationLabel(120)).toBe("2 hours");
+  });
+
   it("formats a time in the venue timezone", () => {
     expect(formatTime("2026-11-14T14:00:00Z", tz)).toBe("7:30 PM");
   });

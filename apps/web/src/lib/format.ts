@@ -77,3 +77,16 @@ export function priceLabel(paise: number | null, unit: "per_hour" | "per_slot" |
   if (paise === null || unit === null) return null;
   return `from ${formatInr(paise)} ${perPerson ? "per person " : ""}${unit === "per_hour" ? "per hour" : "per slot"}`;
 }
+
+/** `India Standard Time` for the given IANA timezone at that moment. */
+export function timeZoneName(d: DateInput, tz: string): string {
+  return parts(d, tz, { timeZoneName: "long" }).timeZoneName ?? tz;
+}
+
+/** `30 minutes`, `1 hour`, `2 hours`, `1 h 30 min`. */
+export function durationLabel(minutes: number): string {
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"}`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m ? `${h} h ${m} min` : `${h} hour${h === 1 ? "" : "s"}`;
+}
