@@ -128,10 +128,10 @@ describe("recording a collection", () => {
     const t = await makeTeam(db);
     const b = await approved(t, 11); // ₹300
     await rejectsWith(collect(t.owner, b.id, "300.01"), EngineError, "payment_exceeds_due");
-    await collect(t.owner, b.id, "250");
-    const err = await rejectsWith(collect(t.owner, b.id, "50.01"), EngineError, "payment_exceeds_due");
-    expect(err.message).toContain("50");
-    await collect(t.owner, b.id, "50");
+    await collect(t.owner, b.id, "250.50");
+    const err = await rejectsWith(collect(t.owner, b.id, "50"), EngineError, "payment_exceeds_due");
+    expect(err.message).toBe("Only ₹49.50 is still due on this booking.");
+    await collect(t.owner, b.id, "49.50");
     await rejectsWith(collect(t.owner, b.id, "1"), EngineError, "payment_exceeds_due");
   });
 

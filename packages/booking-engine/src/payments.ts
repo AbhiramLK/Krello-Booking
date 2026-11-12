@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { bookings, payments, pgErrorCode, writeAudit, type Actor, type Db } from "@krello/database";
+import { formatInr } from "@krello/pricing";
 import { getTenantAccess } from "./context";
 import { EngineError } from "./errors";
 import type { BookingRow } from "./bookings";
@@ -68,7 +69,7 @@ export async function recordPayment(
         if (input.amount > due) {
           throw new EngineError(
             "payment_exceeds_due",
-            due === 0 ? "This booking is already fully paid." : `Only ₹${(due / 100).toLocaleString("en-IN")} is still due on this booking.`,
+            due === 0 ? "This booking is already fully paid." : `Only ${formatInr(due)} is still due on this booking.`,
             { due },
           );
         }
