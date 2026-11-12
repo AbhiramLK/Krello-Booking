@@ -53,7 +53,12 @@ describe("normalisePhone", () => {
     expect(normalisePhone(input)).toBe("+919876543210");
   });
 
-  it.each(["987654321", "08012345678", "07912345678", "abc"])("rejects %s", (input) => {
+  it("accepts the leading-0 form of 80 and 79 mobile series", () => {
+    expect(normalisePhone("08012345678")).toBe("+918012345678");
+    expect(normalisePhone("07912345678")).toBe("+917912345678");
+  });
+
+  it.each(["987654321", "0801234567", "5876543210", "abc"])("rejects %s", (input) => {
     expect(normalisePhone(input)).toBeNull();
   });
 });

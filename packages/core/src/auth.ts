@@ -28,18 +28,10 @@ export class AppError extends Error {
 
 /* ---------- phone numbers ---------- */
 
-/**
- * Normalises an Indian mobile number to +91XXXXXXXXXX, or returns null.
- * A leading 0 is accepted as the dialling prefix ("09876543210"), except before
- * 79 or 80: "079…" and "080…" are Ahmedabad and Bengaluru landline codes, so an
- * 11-digit number that starts that way is a landline, not a mobile with a 0.
- * (Enter those mobiles as ten digits.)
- */
+/** Normalises an Indian mobile number to +91XXXXXXXXXX, or returns null. */
 export function normalisePhone(input: string): string | null {
   const digits = input.replace(/[^\d]/g, "");
-  let local = digits;
-  if (digits.length === 12 && digits.startsWith("91")) local = digits.slice(2);
-  else if (digits.length === 11 && digits.startsWith("0") && !/^0(79|80)/.test(digits)) local = digits.slice(1);
+  const local = digits.length === 12 && digits.startsWith("91") ? digits.slice(2) : digits.length === 11 && digits.startsWith("0") ? digits.slice(1) : digits;
   return /^[6-9]\d{9}$/.test(local) ? `+91${local}` : null;
 }
 

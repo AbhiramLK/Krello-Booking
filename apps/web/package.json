@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "next dev",
+    "dev": "node scripts/next-with-env.mjs dev",
     "build": "next build",
-    "start": "next start",
+    "start": "node scripts/next-with-env.mjs start",
     "typecheck": "tsc --noEmit -p ."
   },
   "dependencies": {
