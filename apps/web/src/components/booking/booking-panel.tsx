@@ -11,10 +11,11 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { newKey } from "@/lib/new-key";
 import { BookingSummary, type QuoteState } from "./booking-summary";
 import { DateStrip } from "./date-strip";
 import { DetailsStep, type Contact, type SignedInUser } from "./details-step";
-import { afterRefresh, clickSlot, readyToSend, windowInstants, type Selection } from "./selection";
+import { afterRefresh, clickSlot, keepsSubmitLocked, readyToSend, windowInstants, type Selection } from "./selection";
 import { SlotGrid } from "./slot-grid";
 
 interface BookingPanelProps {
@@ -31,16 +32,6 @@ type Availability =
 const REFRESH_MS = 30_000;
 const MAX_GROUP = 50;
 const OFFLINE = "We could not reach the server. Check your connection and try again.";
-
-/** A fresh idempotency key. `crypto.randomUUID` needs a secure context, so fall back on plain http. */
-function newKey(): string {
-  if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
-  const b = crypto.getRandomValues(new Uint8Array(16));
-  b[6] = (b[6]! & 0x0f) | 0x40;
-  b[8] = (b[8]! & 0x3f) | 0x80;
-  const h = [...b].map((x) => x.toString(16).padStart(2, "0")).join("");
-  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
-}
 
 /**
  * Live availability, slot selection, price and the request itself. Every rule is
@@ -229,6 +220,9 @@ export function BookingPanel({ business, initialLocationId }: BookingPanelProps)
     inFlight.current = true;
     setSubmitting(true);
     setSubmitError(null);
+    // Once a request is accepted the panel stays locked, with the same key, until
+    // the status page replaces it: a second click then cannot create a second request.
+    let locked = false;
     try {
       const result = await submitRequestAction({
         locationId,
@@ -242,7 +236,7 @@ export function BookingPanel({ business, initialLocationId }: BookingPanelProps)
         idempotencyKey,
       });
       if (result.ok) {
-        setIdempotencyKey(newKey());
+        locked = keepsSubmitLocked(result);
         router.push(result.data.statusUrl);
         return;
       }
@@ -261,8 +255,10 @@ export function BookingPanel({ business, initialLocationId }: BookingPanelProps)
     } catch {
       setSubmitError(OFFLINE);
     } finally {
-      inFlight.current = false;
-      setSubmitting(false);
+      if (!locked) {
+        inFlight.current = false;
+        setSubmitting(false);
+      }
     }
   }
 

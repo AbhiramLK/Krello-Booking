@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { durationLabel, formatDayLong, formatInr, minuteLabel } from "@/lib/format";
+import { newKey } from "@/lib/new-key";
 import { cn } from "@/lib/utils";
 import { createManualBookingAction, quoteManualBookingAction } from "./actions";
 import { chainFrom, openSlots } from "./geometry";
@@ -31,10 +32,6 @@ type Quote =
 
 /** How soon a slot starts, for choosing a sensible default source: a booking about to start is a walk-in. */
 const WALK_IN_WINDOW_MS = 2 * 60 * 60_000;
-
-function newKey(): string {
-  return crypto.randomUUID();
-}
 
 export interface ManualBookingDialogProps {
   open: boolean;

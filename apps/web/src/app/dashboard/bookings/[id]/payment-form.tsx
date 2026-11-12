@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import type { ActionResult } from "@/lib/action";
 import { formatInr, rupeesInput } from "@/lib/format";
+import { newKey } from "@/lib/new-key";
 import { recordPaymentAction } from "../../payments/actions";
 
 type Kind = "collection" | "refund";
@@ -78,7 +79,7 @@ function EntryForm({ bookingId, kind, max, disabled, onDone }: EntryProps) {
       setError("Enter an amount in rupees, like 150 or 150.50.");
       return;
     }
-    attempt.current ??= crypto.randomUUID();
+    attempt.current ??= newKey();
     setSaving(true);
     let result: ActionResult<{ replayed: boolean }>;
     try {

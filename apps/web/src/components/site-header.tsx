@@ -6,7 +6,7 @@ import { getCurrentUser } from "@/lib/session";
 
 const NAV = [
   { href: "/search", label: "Find a venue" },
-  { href: "/for-business", label: "For business" },
+  { href: "/login?next=/dashboard", label: "For business" },
 ];
 
 export async function SiteHeader() {

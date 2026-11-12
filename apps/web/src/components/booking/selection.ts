@@ -169,3 +169,13 @@ export function readyToSend(s: {
 }): boolean {
   return s.step === "details" && s.selectionKey !== "" && s.quote.status === "ready" && s.quote.key === s.selectionKey;
 }
+
+/**
+ * Whether the panel stays locked after a submission. An accepted request keeps
+ * it locked, with the same idempotency key, until navigation unmounts the
+ * panel, so a click made while the status page loads sends nothing. Every
+ * failure unlocks it so the customer can try again.
+ */
+export function keepsSubmitLocked(result: { ok: boolean }): boolean {
+  return result.ok;
+}

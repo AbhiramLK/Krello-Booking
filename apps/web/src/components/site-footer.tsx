@@ -9,7 +9,7 @@ export function SiteFooter() {
           <Link href="/search" className="hover:text-foreground">
             Find a venue
           </Link>
-          <Link href="/for-business" className="hover:text-foreground">
+          <Link href="/login?next=/dashboard" className="hover:text-foreground">
             For business
           </Link>
           <Link href="/login" className="hover:text-foreground">

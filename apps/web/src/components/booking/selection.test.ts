@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SlotView } from "@krello/booking-engine";
-import { afterRefresh, clickSlot, prune, readyToSend, windowInstants, type GridResource, type Selection } from "./selection";
+import { afterRefresh, clickSlot, prune, keepsSubmitLocked, readyToSend, windowInstants, type GridResource, type Selection } from "./selection";
 
 const DAY = Date.UTC(2026, 10, 14, 0, 0) - 330 * 60_000; // local midnight in IST
 
@@ -126,5 +126,15 @@ describe("afterRefresh and readyToSend", () => {
     expect(readyToSend({ ...ok, quote: { status: "error" } })).toBe(false);
     // A price worked out for the previous selection does not count.
     expect(readyToSend({ ...ok, quote: { status: "ready", key: "k0" } })).toBe(false);
+  });
+});
+
+describe("keepsSubmitLocked", () => {
+  it("stays locked after an accepted request, so a late second click sends nothing", () => {
+    expect(keepsSubmitLocked({ ok: true })).toBe(true);
+  });
+
+  it("unlocks after a refusal so the customer can try again", () => {
+    expect(keepsSubmitLocked({ ok: false })).toBe(false);
   });
 });
