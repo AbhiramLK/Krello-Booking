@@ -12,6 +12,7 @@ import { telHref } from "../../requests/request-card";
 import { bookingIdSchema } from "../../schemas";
 import { getWritable } from "../../tenant";
 import { AddNoteForm, BookingActions } from "./booking-actions";
+import { PaymentForm } from "./payment-form";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Booking" };
@@ -192,6 +193,15 @@ export default async function DashboardBookingPage({ params }: { params: Promise
             <dd className="tabular font-semibold">{confirmed ? formatInr(due) : "–"}</dd>
           </div>
         </dl>
+        <PaymentForm
+          bookingId={b.id}
+          due={due}
+          collected={b.amountCollected}
+          collectible={confirmed}
+          canRecord={ctx.can("payments.record")}
+          canRefund={ctx.can("payments.refund")}
+          disabled={!writable}
+        />
         {found.payments.length === 0 ? (
           <p className="mt-4 text-[15px] text-muted-foreground">No payments recorded yet. Customers pay at the venue.</p>
         ) : (

@@ -96,3 +96,10 @@ export function formatDateShort(date: string): string {
   const p = parts(`${date}T12:00:00Z`, "UTC", { weekday: "short", day: "numeric", month: "short" });
   return `${p.weekday} ${p.day} ${p.month}`;
 }
+
+/** Paise as the plain rupee text a form field holds: `15000` is `150`, `15050` is `150.50`. */
+export function rupeesInput(paise: number): string {
+  const whole = Math.floor(paise / 100);
+  const rest = paise % 100;
+  return rest ? `${whole}.${String(rest).padStart(2, "0")}` : String(whole);
+}

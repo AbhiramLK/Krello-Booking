@@ -11,6 +11,7 @@ import {
   formatTime,
   minuteLabel,
   priceLabel,
+  rupeesInput,
   timeZoneName,
 } from "./format";
 
@@ -80,5 +81,15 @@ describe("marketplace formatting", () => {
 
   it("formats month and year in the venue timezone", () => {
     expect(formatMonthYear("2026-10-31T20:00:00Z", "Asia/Kolkata")).toBe("Nov 2026");
+  });
+});
+
+describe("rupeesInput", () => {
+  it("writes paise as the text a rupee field takes", () => {
+    expect(rupeesInput(15000)).toBe("150");
+    expect(rupeesInput(15050)).toBe("150.50");
+    expect(rupeesInput(15005)).toBe("150.05");
+    expect(rupeesInput(5)).toBe("0.05");
+    expect(rupeesInput(0)).toBe("0");
   });
 });
