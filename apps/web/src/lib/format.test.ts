@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { countdown, formatDay, formatDayLong, formatInr, formatRange, formatTime, minuteLabel } from "./format";
+import { countdown, formatDay, formatDayLong, formatInr, formatMonthYear, formatRange, formatTime, minuteLabel, priceLabel } from "./format";
 
 const tz = "Asia/Kolkata";
 
@@ -39,5 +39,20 @@ describe("format", () => {
 
   it("re-exports the rupee formatter", () => {
     expect(formatInr(150000)).toContain("1,500");
+  });
+});
+
+describe("marketplace formatting", () => {
+  it("labels prices with their unit", () => {
+    expect(priceLabel(20000, "per_hour", false)).toBe("from ₹200 per hour");
+    expect(priceLabel(15000, "per_slot", false)).toBe("from ₹150 per slot");
+    expect(priceLabel(15000, "per_slot", true)).toBe("from ₹150 per person per slot");
+    expect(priceLabel(12550, "per_hour", null)).toBe("from ₹125.50 per hour");
+    expect(priceLabel(null, "per_hour", false)).toBeNull();
+    expect(priceLabel(100, null, false)).toBeNull();
+  });
+
+  it("formats month and year in the venue timezone", () => {
+    expect(formatMonthYear("2026-10-31T20:00:00Z", "Asia/Kolkata")).toBe("Nov 2026");
   });
 });

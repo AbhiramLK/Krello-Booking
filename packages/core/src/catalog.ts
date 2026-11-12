@@ -17,10 +17,21 @@ export const RESERVED_SLUGS = new Set([
   "sw.js", "_next", "about", "help", "terms", "privacy", "pricing", "for-business", "me", "favourites", "onboarding",
 ]);
 
+/**
+ * Fully qualified ids for correlated subqueries. In a select list over one table
+ * Drizzle drops the table prefix, which would make `"id"` bind to the subquery's own table.
+ */
+const bizId = sql.raw('"businesses"."id"');
+const resourceId = sql.raw('"resources"."id"');
+
+/** Escapes `%`, `_` and `\` so user text matches literally inside ILIKE. */
+const likeContains = (text: string) => `%${text.replace(/[%_\\]/g, (c) => `\\${c}`)}%`;
+
 export function slugify(input: string): string {
   return input
     .toLowerCase()
     .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 60);
@@ -36,11 +47,11 @@ export const isPubliclyListed = sql`(
   and ${businesses.isListed}
   and exists (
     select 1 from subscriptions s
-    where s.business_id = ${businesses.id} and s.status in ('trialing', 'active', 'grace')
+    where s.business_id = ${bizId} and s.status in ('trialing', 'active', 'grace')
   )
   and exists (
     select 1 from resources r
-    where r.business_id = ${businesses.id} and r.status = 'active'
+    where r.business_id = ${bizId} and r.status = 'active'
   )
 )`;
 
@@ -67,6 +78,7 @@ export interface BusinessCard {
   /** Lowest configured price in paise, if any. */
   priceFrom: number | null;
   priceUnit: "per_hour" | "per_slot" | null;
+  pricePerPerson: boolean | null;
 }
 
 export interface SearchInput {
@@ -84,27 +96,28 @@ export async function searchBusinesses(db: DbOrTx, input: SearchInput = {}): Pro
   const pageSize = Math.min(Math.max(input.pageSize ?? 12, 1), 48);
   const page = Math.max(input.page ?? 1, 1);
   const q = input.q?.trim().slice(0, 80);
-  const like = q ? `%${q.replace(/[%_\\]/g, (c) => `\\${c}`)}%` : null;
+  const like = q ? likeContains(q) : null;
+  const cityLike = input.city?.trim() ? likeContains(input.city.trim().slice(0, 80)) : null;
 
-  const rating = sql<number | null>`(select round(avg(rv.rating)::numeric, 1)::float from reviews rv where rv.business_id = ${businesses.id} and rv.moderation_status = 'visible')`;
-  const reviewCount = sql<number>`(select count(*)::int from reviews rv where rv.business_id = ${businesses.id} and rv.moderation_status = 'visible')`;
-  const priceFrom = sql<number | null>`(select min(pr.amount) from pricing_rules pr where pr.business_id = ${businesses.id} and pr.status = 'active' and pr.rule_type = 'base')`;
+  const rating = sql<number | null>`(select round(avg(rv.rating)::numeric, 1)::float from reviews rv where rv.business_id = ${bizId} and rv.moderation_status = 'visible')`;
+  const reviewCount = sql<number>`(select count(*)::int from reviews rv where rv.business_id = ${bizId} and rv.moderation_status = 'visible')`;
+  const priceFrom = sql<number | null>`(select min(pr.amount) from pricing_rules pr join resources r on r.id = pr.resource_id where pr.business_id = ${bizId} and r.status = 'active' and pr.status = 'active' and pr.rule_type = 'base')`;
 
   const filters = [isPubliclyListed];
   if (like) {
     filters.push(sql`(
       ${businesses.name} ilike ${like} or ${businesses.description} ilike ${like}
-      or exists (select 1 from locations l where l.business_id = ${businesses.id} and (l.locality ilike ${like} or l.city ilike ${like} or l.postal_code ilike ${like}))
-      or exists (select 1 from business_categories bc join activity_categories ac on ac.id = bc.category_id where bc.business_id = ${businesses.id} and ac.name ilike ${like})
-      or exists (select 1 from resources r where r.business_id = ${businesses.id} and r.status = 'active' and (r.name ilike ${like} or r.resource_type ilike ${like}))
+      or exists (select 1 from locations l where l.business_id = ${bizId} and (l.locality ilike ${like} or l.city ilike ${like} or l.postal_code ilike ${like}))
+      or exists (select 1 from business_categories bc join activity_categories ac on ac.id = bc.category_id where bc.business_id = ${bizId} and ac.name ilike ${like})
+      or exists (select 1 from resources r where r.business_id = ${bizId} and r.status = 'active' and (r.name ilike ${like} or r.resource_type ilike ${like}))
       or ${businesses.amenities}::text ilike ${like}
     )`);
   }
   if (input.category) {
-    filters.push(sql`exists (select 1 from business_categories bc join activity_categories ac on ac.id = bc.category_id where bc.business_id = ${businesses.id} and ac.slug = ${input.category})`);
+    filters.push(sql`exists (select 1 from business_categories bc join activity_categories ac on ac.id = bc.category_id where bc.business_id = ${bizId} and ac.slug = ${input.category})`);
   }
-  if (input.city) {
-    filters.push(sql`exists (select 1 from locations l where l.business_id = ${businesses.id} and l.status = 'active' and (l.city ilike ${input.city} or l.locality ilike ${input.city}))`);
+  if (cityLike) {
+    filters.push(sql`exists (select 1 from locations l where l.business_id = ${bizId} and l.status = 'active' and (l.city ilike ${cityLike} or l.locality ilike ${cityLike}))`);
   }
   if (input.minRating) filters.push(sql`${rating} >= ${input.minRating}`);
   if (input.maxPrice) filters.push(sql`${priceFrom} <= ${input.maxPrice}`);
@@ -133,10 +146,12 @@ export async function searchBusinesses(db: DbOrTx, input: SearchInput = {}): Pro
         rating,
         reviewCount,
         priceFrom,
-        priceUnit: sql<"per_hour" | "per_slot" | null>`(select r.price_unit from resources r where r.business_id = ${businesses.id} and r.status = 'active' order by r.sort_order limit 1)`,
-        categories: sql<{ slug: string; name: string }[]>`coalesce((select json_agg(json_build_object('slug', ac.slug, 'name', ac.name) order by ac.sort_order) from business_categories bc join activity_categories ac on ac.id = bc.category_id where bc.business_id = ${businesses.id}), '[]'::json)`,
-        localities: sql<string[]>`coalesce((select json_agg(distinct l.locality) from locations l where l.business_id = ${businesses.id} and l.status = 'active'), '[]'::json)`,
-        city: sql<string | null>`(select l.city from locations l where l.business_id = ${businesses.id} and l.status = 'active' limit 1)`,
+        // The unit and per-person flag of the resource that sets `priceFrom`, so the card never mislabels it.
+        priceUnit: sql<"per_hour" | "per_slot" | null>`(select r.price_unit from resources r join pricing_rules pr on pr.resource_id = r.id where r.business_id = ${bizId} and r.status = 'active' and pr.status = 'active' and pr.rule_type = 'base' order by pr.amount, r.sort_order, r.id limit 1)`,
+        pricePerPerson: sql<boolean | null>`(select r.price_per_person from resources r join pricing_rules pr on pr.resource_id = r.id where r.business_id = ${bizId} and r.status = 'active' and pr.status = 'active' and pr.rule_type = 'base' order by pr.amount, r.sort_order, r.id limit 1)`,
+        categories: sql<{ slug: string; name: string }[]>`coalesce((select json_agg(json_build_object('slug', ac.slug, 'name', ac.name) order by ac.sort_order) from business_categories bc join activity_categories ac on ac.id = bc.category_id where bc.business_id = ${bizId}), '[]'::json)`,
+        localities: sql<string[]>`coalesce((select json_agg(distinct l.locality) from locations l where l.business_id = ${bizId} and l.status = 'active'), '[]'::json)`,
+        city: sql<string | null>`(select l.city from locations l where l.business_id = ${bizId} and l.status = 'active' limit 1)`,
       })
       .from(businesses)
       .where(where)
@@ -194,7 +209,7 @@ export async function getPublicBusiness(db: DbOrTx, slug: string) {
         priceUnit: resources.priceUnit,
         pricePerPerson: resources.pricePerPerson,
         advanceDays: resources.advanceDays,
-        priceFrom: sql<number | null>`(select min(pr.amount) from pricing_rules pr where pr.resource_id = ${resources.id} and pr.status = 'active')`,
+        priceFrom: sql<number | null>`(select min(pr.amount) from pricing_rules pr where pr.resource_id = ${resourceId} and pr.status = 'active')`,
       })
       .from(resources)
       .where(and(eq(resources.businessId, business.id), eq(resources.status, "active")))

@@ -1,6 +1,8 @@
 // Display formatting shared by server components, client components and tests.
 // Keep this file free of Next.js and server-only imports.
-export { formatInr } from "@krello/pricing";
+import { formatInr } from "@krello/pricing";
+
+export { formatInr };
 
 type DateInput = Date | string;
 
@@ -59,4 +61,19 @@ export function countdown(to: Date, now: Date): string {
   const whole = Math.max(1, Math.floor(ms / 60_000));
   if (whole < 60) return `${whole} min left`;
   return `${Math.floor(whole / 60)} h ${String(whole % 60).padStart(2, "0")} min left`;
+}
+
+/** `Nov 2026` in the given IANA timezone. */
+export function formatMonthYear(d: DateInput, tz: string): string {
+  const p = parts(d, tz, { month: "short", year: "numeric" });
+  return `${p.month} ${p.year}`;
+}
+
+/**
+ * `from ₹200 per hour`, `from ₹150 per slot`, `from ₹150 per person per slot`.
+ * `paise` is the amount for one price unit; returns null when nothing is priced yet.
+ */
+export function priceLabel(paise: number | null, unit: "per_hour" | "per_slot" | null, perPerson: boolean | null): string | null {
+  if (paise === null || unit === null) return null;
+  return `from ${formatInr(paise)} ${perPerson ? "per person " : ""}${unit === "per_hour" ? "per hour" : "per slot"}`;
 }
