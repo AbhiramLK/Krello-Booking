@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import {
@@ -50,19 +51,33 @@ export async function endSession(): Promise<void> {
   jar.delete(SESSION_COOKIE);
 }
 
+export type TenantResolution = { ok: true; ctx: TenantContext } | { ok: false; reason: "signed_out" | "no_business" };
+
 /**
- * The signed-in user's active business context. Access comes from the
- * membership row; the cookie only chooses between memberships the user holds.
+ * The signed-in user's active business context, without redirecting, for
+ * route handlers and server actions. Access comes from the membership row; the
+ * cookie only chooses between memberships the user holds. Cached per request,
+ * so a layout and its page share one lookup.
  */
-export async function requireTenant(permission?: Permission): Promise<TenantContext> {
-  const user = await requireUser("/dashboard");
+export const resolveTenant = cache(async (): Promise<TenantResolution> => {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, reason: "signed_out" };
   const db = getDb();
   const memberships = await listMemberships(db, user.id);
   const wanted = (await cookies()).get(BUSINESS_COOKIE)?.value;
   const chosen = memberships.find((m) => m.business.id === wanted) ?? memberships[0];
-  if (!chosen) notFound();
-  const ctx = await getTenantContext(db, user, chosen.business.id);
-  if (!ctx) notFound();
+  const ctx = chosen ? await getTenantContext(db, user, chosen.business.id) : null;
+  return ctx ? { ok: true, ctx } : { ok: false, reason: "no_business" };
+});
+
+/** Like `resolveTenant`, for pages: signed-out visitors go to login, non-members get 404. */
+export async function requireTenant(permission?: Permission): Promise<TenantContext> {
+  const found = await resolveTenant();
+  if (!found.ok) {
+    if (found.reason === "signed_out") redirect(`/login?next=${encodeURIComponent("/dashboard")}`);
+    notFound();
+  }
+  const { ctx } = found;
   if (permission && !ctx.can(permission)) {
     throw new AppError("forbidden", "You do not have permission to do that.", 403);
   }
