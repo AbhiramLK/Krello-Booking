@@ -123,7 +123,11 @@ export function CalendarGrid({ initial, locationName, canCreate, canBlock, writa
   };
 
   const axis = axisOf(day);
-  const resources = day.resources.filter((r) => r.slots.length > 0 && (!resourceFilter || r.id === resourceFilter));
+  // A resource with no slots today still gets its row when something is booked or blocked on it.
+  const onShow = day.resources.filter(
+    (r) => r.slots.length > 0 || day.bookings.some((b) => b.resourceIds.includes(r.id)) || day.blocks.some((b) => b.resourceId === r.id),
+  );
+  const resources = onShow.filter((r) => !resourceFilter || r.id === resourceFilter);
   const visible = day.bookings.filter((b) => (!statusFilter || b.status === statusFilter) && (!sourceFilter || b.source === sourceFilter));
   const filtered = !!(resourceFilter || statusFilter || sourceFilter);
   const canAdd = canCreate && writable;
@@ -151,13 +155,11 @@ export function CalendarGrid({ initial, locationName, canCreate, canBlock, writa
           </label>
           <select id={ids.resource} value={resourceFilter} onChange={(e) => setResourceFilter(e.target.value)} className={SELECT}>
             <option value="">All resources</option>
-            {day.resources
-              .filter((r) => r.slots.length > 0)
-              .map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.name}
-                </option>
-              ))}
+            {onShow.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.name}
+              </option>
+            ))}
           </select>
         </div>
         <div className="flex flex-col gap-1">

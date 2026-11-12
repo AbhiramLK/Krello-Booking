@@ -73,6 +73,8 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
 
       {day && (
         <CalendarGrid
+          // Filters belong to a location; they carry over from day to day but not between locations.
+          key={location.id}
           initial={toDayView(day)}
           locationName={location.name}
           canCreate={ctx.can("bookings.create_manual")}
