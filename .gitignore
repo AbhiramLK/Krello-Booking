@@ -12,3 +12,5 @@ coverage/
 .pgdata/
 *.tsbuildinfo
 next-env.d.ts
+# Written by next dev
+apps/web/AGENTS.md
