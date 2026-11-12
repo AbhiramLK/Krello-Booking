@@ -4,8 +4,11 @@ import { useId, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ChevronDown } from "lucide-react";
 
-/** Narrows a dashboard page to one location through `?location=`. Renders nothing for a single location. */
-export function LocationFilter({ locations, value }: { locations: { id: string; name: string }[]; value?: string }) {
+/**
+ * Narrows a dashboard page to one location through `?location=`. Renders nothing for a single location.
+ * Pass `allowAll={false}` for a page that always shows exactly one location.
+ */
+export function LocationFilter({ locations, value, allowAll = true }: { locations: { id: string; name: string }[]; value?: string; allowAll?: boolean }) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -34,7 +37,7 @@ export function LocationFilter({ locations, value }: { locations: { id: string; 
         aria-busy={pending || undefined}
         className="h-10 cursor-pointer appearance-none rounded-full bg-card py-1 pl-4 pr-9 text-sm font-medium shadow-xs ring-1 ring-border outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
       >
-        <option value="">All locations</option>
+        {allowAll && <option value="">All locations</option>}
         {locations.map((l) => (
           <option key={l.id} value={l.id}>
             {l.name}

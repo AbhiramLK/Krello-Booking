@@ -3,6 +3,7 @@ import {
   countdown,
   durationLabel,
   formatDay,
+  formatDateShort,
   formatDayLong,
   formatInr,
   formatMonthYear,
@@ -16,6 +17,11 @@ import {
 const tz = "Asia/Kolkata";
 
 describe("format", () => {
+  it("writes a calendar date as a short weekday and day", () => {
+    expect(formatDateShort("2026-11-16")).toBe("Mon 16 Nov");
+    expect(formatDateShort("2026-12-31")).toBe("Thu 31 Dec");
+  });
+
   it("names the timezone and durations", () => {
     expect(timeZoneName("2026-11-14T14:00:00Z", tz)).toBe("India Standard Time");
     expect(durationLabel(30)).toBe("30 minutes");

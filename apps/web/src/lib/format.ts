@@ -90,3 +90,9 @@ export function durationLabel(minutes: number): string {
   const m = minutes % 60;
   return m ? `${h} h ${m} min` : `${h} hour${h === 1 ? "" : "s"}`;
 }
+
+/** `Mon 16 Nov` from a `YYYY-MM-DD` calendar date. */
+export function formatDateShort(date: string): string {
+  const p = parts(`${date}T12:00:00Z`, "UTC", { weekday: "short", day: "numeric", month: "short" });
+  return `${p.weekday} ${p.day} ${p.month}`;
+}

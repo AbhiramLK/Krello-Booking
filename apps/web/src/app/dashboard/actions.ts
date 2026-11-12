@@ -7,17 +7,9 @@ import { AppError, addNoteForTenant, decideBooking, getTenantContext, markNotifi
 import type { BookingStatus } from "@krello/booking-engine/labels";
 import { runAction, type ActionResult } from "@/lib/action";
 import { getDb } from "@/lib/db";
-import { BUSINESS_COOKIE, getCurrentUser, resolveTenant } from "@/lib/session";
+import { BUSINESS_COOKIE, getCurrentUser } from "@/lib/session";
 import { addNoteSchema, BOOKING_SEARCH_COOKIE, bookingFiltersSchema, bookingsHref, businessIdSchema, decideBookingSchema } from "./schemas";
-
-/** The member's business, or a failure the client can show. Never redirects: this runs from a client call. */
-async function tenant() {
-  const found = await resolveTenant();
-  if (found.ok) return found.ctx;
-  throw found.reason === "signed_out"
-    ? new AppError("unauthenticated", "Your session has ended. Sign in again to continue.", 401)
-    : new AppError("forbidden", "You are not a member of this business.", 403);
-}
+import { actionTenant as tenant } from "./tenant";
 
 /** Approves, declines, cancels, completes or marks a no-show. Permission and location are checked in core. */
 export async function decideBookingAction(input: {
