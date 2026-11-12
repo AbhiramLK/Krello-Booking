@@ -50,6 +50,11 @@ export function UserMenu({ name, phone, isBusinessMember }: UserMenuProps) {
               My bookings
             </Link>
           </DropdownMenu.Item>
+          <DropdownMenu.Item asChild>
+            <Link href="/account/profile" className={itemClass}>
+              Profile
+            </Link>
+          </DropdownMenu.Item>
           {isBusinessMember && (
             <DropdownMenu.Item asChild>
               <Link href="/dashboard" className={itemClass}>

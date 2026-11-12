@@ -170,3 +170,16 @@ export async function viewBookingByToken(db: Db, token: string) {
   }
   return found;
 }
+
+/**
+ * A signed-in customer's own booking for its page. As with `viewBookingByToken`,
+ * an overdue request is recorded as expired first, so the slot really is free.
+ */
+export async function viewCustomerBooking(db: Db, userId: string, bookingId: string) {
+  const found = await getCustomerBooking(db, userId, bookingId);
+  if (found && found.booking.status === "pending" && found.view.status === "expired") {
+    await transitionBooking(db, { bookingId: found.booking.id, action: "expire", actor: SYSTEM_ACTOR });
+    return getCustomerBooking(db, userId, bookingId);
+  }
+  return found;
+}

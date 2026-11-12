@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { countdown, formatDay, formatInr, formatRange, formatTime, timeZoneName } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { cancelAccountBookingAction } from "@/app/account/actions";
 import { cancelBookingAction } from "./actions";
 
 /** What the status page shows. Built on the server from the customer view only. */
@@ -33,7 +34,19 @@ export interface StatusBooking {
   cancellationReasonRequired: boolean;
 }
 
+/**
+ * Where the booking comes from. A status link holds a secret token; a signed-in
+ * customer's booking is addressed by id and checked against the session.
+ */
+export type StatusSource = { kind: "token"; token: string } | { kind: "account"; bookingId: string };
+
 const POLL_MS = 15_000;
+
+function pollUrl(source: StatusSource): string {
+  return source.kind === "token"
+    ? `/api/booking-status/${encodeURIComponent(source.token)}`
+    : `/api/account/bookings/${encodeURIComponent(source.bookingId)}/status`;
+}
 
 const LOOK: Record<BookingStatus, { icon: LucideIcon; tone: string; lead: string }> = {
   pending: { icon: Hourglass, tone: "bg-warning/15 text-[#8a5300]", lead: "Your request has been sent. The venue has not confirmed it yet." },
@@ -58,7 +71,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   );
 }
 
-export function StatusView({ token, booking: b }: { token: string; booking: StatusBooking }) {
+export function StatusView({ source, booking: b }: { source: StatusSource; booking: StatusBooking }) {
   const router = useRouter();
   const tz = b.venue.timezone;
   const look = LOOK[b.status];
@@ -73,6 +86,7 @@ export function StatusView({ token, booking: b }: { token: string; booking: Stat
     return () => clearInterval(id);
   }, [pending]);
 
+  const url = pollUrl(source);
   const last = useRef({ status: b.status, canCancel: b.canCancel });
   last.current = { status: b.status, canCancel: b.canCancel };
   useEffect(() => {
@@ -81,9 +95,10 @@ export function StatusView({ token, booking: b }: { token: string; booking: Stat
     const check = async () => {
       if (document.visibilityState !== "visible") return;
       try {
-        const res = await fetch(`/api/booking-status/${encodeURIComponent(token)}`, { cache: "no-store" });
+        const res = await fetch(url, { cache: "no-store" });
         if (stopped) return;
-        if (res.status === 404) return router.refresh();
+        // Gone, or (for an account booking) signed out: the server page decides what to show.
+        if (res.status === 404 || res.status === 401) return router.refresh();
         if (!res.ok) return;
         const next = (await res.json()) as { status: BookingStatus; canCancel: boolean };
         if (next.status !== last.current.status || next.canCancel !== last.current.canCancel) router.refresh();
@@ -98,7 +113,7 @@ export function StatusView({ token, booking: b }: { token: string; booking: Stat
       clearInterval(id);
       document.removeEventListener("visibilitychange", check);
     };
-  }, [pending, token, router]);
+  }, [pending, url, router]);
 
   // When the deadline passes, ask the server; it records the expiry and releases the slot.
   const deadline = b.pendingExpiresAt ? new Date(b.pendingExpiresAt) : null;
@@ -123,7 +138,11 @@ export function StatusView({ token, booking: b }: { token: string; booking: Stat
     }
     setCancelling(true);
     try {
-      const result = await cancelBookingAction({ token, reason: reason.trim() || undefined });
+      const trimmed = reason.trim() || undefined;
+      const result =
+        source.kind === "token"
+          ? await cancelBookingAction({ token: source.token, reason: trimmed })
+          : await cancelAccountBookingAction({ bookingId: source.bookingId, reason: trimmed });
       if (!result.ok) {
         setReasonError(result.message);
         return;
