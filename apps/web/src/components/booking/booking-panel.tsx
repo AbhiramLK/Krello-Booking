@@ -14,7 +14,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { BookingSummary, type QuoteState } from "./booking-summary";
 import { DateStrip } from "./date-strip";
 import { DetailsStep, type Contact, type SignedInUser } from "./details-step";
-import { clickSlot, prune, windowInstants, type Selection } from "./selection";
+import { afterRefresh, clickSlot, readyToSend, windowInstants, type Selection } from "./selection";
 import { SlotGrid } from "./slot-grid";
 
 interface BookingPanelProps {
@@ -41,9 +41,6 @@ function newKey(): string {
   const h = [...b].map((x) => x.toString(16).padStart(2, "0")).join("");
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
 }
-
-const listNames = (names: string[]) =>
-  names.length <= 1 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 
 /**
  * Live availability, slot selection, price and the request itself. Every rule is
@@ -149,20 +146,19 @@ export function BookingPanel({ business, initialLocationId }: BookingPanelProps)
     };
   }, [load]);
 
-  // Whenever the slots or the group size change, drop anything that is no longer bookable.
+  // Whenever the slots or the group size change, drop anything that is no longer
+  // bookable and send the customer back to the grid to see what changed: a
+  // request never goes out for a selection they have not seen priced.
   // A message already on screen (say, from a refused request) is kept.
   const selectionRef = useRef(selection);
   selectionRef.current = selection;
   useEffect(() => {
     if (availability.status !== "ready") return;
-    const { selection: kept, dropped } = prune(selectionRef.current, availability.data.resources, groupSize);
-    if (!dropped.length) return;
-    setSelection(kept);
-    setNotice(
-      (current) =>
-        current ??
-        `${listNames(dropped)} ${dropped.length === 1 ? "is" : "are"} no longer available for that time, so we removed ${dropped.length === 1 ? "it" : "them"} from your selection.`,
-    );
+    const r = afterRefresh(selectionRef.current, availability.data.resources, groupSize);
+    if (!r.changed) return;
+    setSelection(r.selection);
+    setStep("pick");
+    setNotice((current) => current ?? r.notice);
   }, [availability, groupSize]);
 
   // A changed selection is a different request, so it gets a new key.
@@ -180,6 +176,7 @@ export function BookingPanel({ business, initialLocationId }: BookingPanelProps)
   useEffect(() => {
     if (!selection || !instants) return;
     const seq = ++quoteSeq.current;
+    const forKey = selectionKey;
     setQuote({ status: "loading" });
     const t = setTimeout(async () => {
       try {
@@ -191,7 +188,7 @@ export function BookingPanel({ business, initialLocationId }: BookingPanelProps)
           groupSize,
         });
         if (seq !== quoteSeq.current) return;
-        if (result.ok) setQuote({ status: "ready", quote: result.data });
+        if (result.ok) setQuote({ status: "ready", quote: result.data, key: forKey });
         else {
           setQuote({ status: "error", message: result.message });
           if (result.code === "slot_conflict") void load({ quiet: true });
@@ -217,8 +214,18 @@ export function BookingPanel({ business, initialLocationId }: BookingPanelProps)
   }
 
   /* ---------- sending ---------- */
+  const canSend = readyToSend({ step, selectionKey, quote });
+  // The OTP step finishes asynchronously, so submit() reads the latest render, not the one that started it.
+  const latest = useRef({ canSend, selection, instants, groupSize, contact, idempotencyKey });
+  latest.current = { canSend, selection, instants, groupSize, contact, idempotencyKey };
+
   async function submit() {
+    const { canSend: ready, selection, instants, groupSize, contact, idempotencyKey } = latest.current;
     if (inFlight.current || !selection || !instants) return;
+    if (!ready) {
+      setSubmitError("Your selection or its price has changed. Check the summary, then send your request.");
+      return;
+    }
     inFlight.current = true;
     setSubmitting(true);
     setSubmitError(null);
@@ -351,6 +358,11 @@ export function BookingPanel({ business, initialLocationId }: BookingPanelProps)
 
       {/* Stays mounted on the slot step, so a half-finished phone check survives a trip back to the grid. */}
       <div hidden={step !== "details"} className="mt-4 flex-col gap-4 [&:not([hidden])]:flex">
+        {notice && (
+          <p role="status" className="rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-sm">
+            {notice}
+          </p>
+        )}
         {selection && instants && (
           <BookingSummary
             startsAt={instants.startsAt}
@@ -367,6 +379,7 @@ export function BookingPanel({ business, initialLocationId }: BookingPanelProps)
           contact={contact}
           onContactChange={setContact}
           submitting={submitting}
+          canSend={canSend}
           error={submitError}
           onSubmit={() => void submit()}
           onVerified={(u) => {

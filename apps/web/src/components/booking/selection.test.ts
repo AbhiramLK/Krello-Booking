@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SlotView } from "@krello/booking-engine";
-import { clickSlot, prune, windowInstants, type GridResource, type Selection } from "./selection";
+import { afterRefresh, clickSlot, prune, readyToSend, windowInstants, type GridResource, type Selection } from "./selection";
 
 const DAY = Date.UTC(2026, 10, 14, 0, 0) - 330 * 60_000; // local midnight in IST
 
@@ -103,5 +103,28 @@ describe("prune and windowInstants", () => {
   it("uses the server's instants for the window", () => {
     const sel: Selection = { resourceIds: ["vip"], startMinute: 11 * H, endMinute: 14 * H };
     expect(windowInstants(sel, all, 2)).toEqual({ startsAt: slot(vip, 11 * H).startsAt, endsAt: slot(vip, 12 * H + 30).endsAt });
+  });
+});
+
+describe("afterRefresh and readyToSend", () => {
+  it("reports a selection that lost a resource, with a message", () => {
+    const sel: Selection = { resourceIds: ["t1", "t2"], startMinute: 12 * H, endMinute: 14 * H };
+    const r = afterRefresh(sel, all, 2);
+    expect(r.changed).toBe(true);
+    expect(r.selection).toEqual({ ...sel, resourceIds: ["t1"] });
+    expect(r.notice).toContain("Table 2");
+    const same = afterRefresh({ ...sel, resourceIds: ["t1"] }, all, 2);
+    expect(same).toEqual({ changed: false, selection: { ...sel, resourceIds: ["t1"] }, notice: null });
+  });
+
+  it("sends only from the details step with a price for exactly this selection", () => {
+    const ok = { step: "details" as const, selectionKey: "k1", quote: { status: "ready" as const, key: "k1" } };
+    expect(readyToSend(ok)).toBe(true);
+    expect(readyToSend({ ...ok, step: "pick" })).toBe(false);
+    expect(readyToSend({ ...ok, selectionKey: "" })).toBe(false);
+    expect(readyToSend({ ...ok, quote: { status: "loading" } })).toBe(false);
+    expect(readyToSend({ ...ok, quote: { status: "error" } })).toBe(false);
+    // A price worked out for the previous selection does not count.
+    expect(readyToSend({ ...ok, quote: { status: "ready", key: "k0" } })).toBe(false);
   });
 });

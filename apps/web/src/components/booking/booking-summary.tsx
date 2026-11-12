@@ -7,7 +7,8 @@ import { durationLabel, formatInr, formatRange, timeZoneName } from "@/lib/forma
 
 export type QuoteState =
   | { status: "loading" }
-  | { status: "ready"; quote: BookingQuote }
+  /** `key` identifies the selection this price is for. */
+  | { status: "ready"; quote: BookingQuote; key: string }
   | { status: "error"; message: string };
 
 interface BookingSummaryProps {

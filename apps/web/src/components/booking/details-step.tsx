@@ -28,6 +28,8 @@ interface DetailsStepProps {
   contact: Contact;
   onContactChange: (contact: Contact) => void;
   submitting: boolean;
+  /** False until the selection on screen has a current price; sending waits for it. */
+  canSend: boolean;
   /** Why the last submission failed, if it did. */
   error: string | null;
   /** Sends the request as the signed-in user. */
@@ -43,7 +45,7 @@ const displayPhone = (phone: string) => {
 };
 
 /** Name, phone and optional details. Signed-out customers verify their phone here by code. */
-export function DetailsStep({ user, contact, onContactChange, submitting, error, onSubmit, onVerified }: DetailsStepProps) {
+export function DetailsStep({ user, contact, onContactChange, submitting, canSend, error, onSubmit, onVerified }: DetailsStepProps) {
   const ids = { name: useId(), phone: useId(), email: useId(), notes: useId(), nameError: useId(), phoneError: useId(), codeError: useId() };
   const nameInput = useRef<HTMLInputElement>(null);
   const phoneInput = useRef<HTMLInputElement>(null);
@@ -302,7 +304,7 @@ export function DetailsStep({ user, contact, onContactChange, submitting, error,
         </p>
       )}
 
-      <Button type="submit" size="lg" disabled={busy || (!!sent && !user && code.length !== CODE_LENGTH)} className="h-11 rounded-full text-[15px]">
+      <Button type="submit" size="lg" disabled={busy || (!!user && !canSend) || (!!sent && !user && code.length !== CODE_LENGTH)} className="h-11 rounded-full text-[15px]">
         {submitting
           ? "Sending request…"
           : user

@@ -136,3 +136,36 @@ export function windowInstants(sel: Selection, resources: GridResource[], groupS
   }
   return null;
 }
+
+/**
+ * After fresh slots arrive (or the group size changes): the selection without
+ * anything that can no longer be booked, and a message when something went.
+ * A changed selection is a different request, so the caller sends the customer
+ * back to the grid to see it, and its new price, before anything is sent.
+ */
+export function afterRefresh(
+  sel: Selection | null,
+  resources: GridResource[],
+  groupSize: number,
+): { changed: boolean; selection: Selection | null; notice: string | null } {
+  const { selection, dropped } = prune(sel, resources, groupSize);
+  if (!dropped.length) return { changed: false, selection: sel, notice: null };
+  const one = dropped.length === 1;
+  return {
+    changed: true,
+    selection,
+    notice: `${names(dropped)} ${one ? "is" : "are"} no longer available for that time, so we removed ${one ? "it" : "them"} from your selection. Check it before you send your request.`,
+  };
+}
+
+/**
+ * A request may go only from the details step, for the selection on screen,
+ * once its price has been worked out for exactly that selection.
+ */
+export function readyToSend(s: {
+  step: "pick" | "details";
+  selectionKey: string;
+  quote: { status: "loading" | "ready" | "error"; key?: string };
+}): boolean {
+  return s.step === "details" && s.selectionKey !== "" && s.quote.status === "ready" && s.quote.key === s.selectionKey;
+}
