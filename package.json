@@ -12,12 +12,16 @@
     "dev": "pnpm --filter @krello/web dev",
     "build": "pnpm --filter @krello/web build",
     "worker": "tsx scripts/worker.ts",
+    "dev:all": "tsx scripts/dev-all.ts",
+    "e2e": "playwright test",
     "test": "vitest run",
     "typecheck": "pnpm -r typecheck"
   },
   "devDependencies": {
     "@krello/booking-engine": "workspace:*",
+    "@krello/core": "workspace:*",
     "@krello/database": "workspace:*",
+    "@playwright/test": "^1.65.0",
     "@types/node": "^22.10.0",
     "drizzle-orm": "^0.44.0",
     "embedded-postgres": "^17.5.0-beta.15",

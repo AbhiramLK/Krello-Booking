@@ -14,3 +14,7 @@ coverage/
 next-env.d.ts
 # Written by next dev
 apps/web/AGENTS.md
+# Playwright output and the throwaway end-to-end database
+test-results/
+playwright-report/
+.e2e-data/
