@@ -22,7 +22,24 @@ export const RESERVED_SLUGS = new Set([
  * Drizzle drops the table prefix, which would make `"id"` bind to the subquery's own table.
  */
 const bizId = sql.raw('"businesses"."id"');
-const resourceId = sql.raw('"resources"."id"');
+
+/**
+ * The one definition of "which pricing rules can apply to a resource": its own active rules, plus the
+ * active location-wide defaults (`resource_id is null`) of its location. `r` and `pr` are SQL aliases
+ * of the resource and the rule. Both the card price and the page price are built from this.
+ */
+const ruleAppliesTo = (r: string, pr: string) =>
+  sql.raw(`${pr}.status = 'active' and (${pr}.resource_id = ${r}.id or (${pr}.resource_id is null and ${pr}.location_id = ${r}.location_id))`);
+
+/** The lowest price of one resource, in paise per its price unit. `r` is the resource's SQL alias. */
+const resourceFromPrice = (r: string) => sql<number | null>`(select min(pr.amount) from pricing_rules pr where ${ruleAppliesTo(r, "pr")})`;
+
+/**
+ * A column of the cheapest (resource, rule) pair among a business's active resources at active locations.
+ * Ties break on sort order then id, so amount, unit and per-person flag always come from the same resource.
+ */
+const cheapestOf = <T>(column: string) =>
+  sql<T>`(select ${sql.raw(column)} from resources r join locations l on l.id = r.location_id and l.status = 'active' join pricing_rules pr on ${ruleAppliesTo("r", "pr")} where r.business_id = ${bizId} and r.status = 'active' order by pr.amount, r.sort_order, r.id limit 1)`;
 
 /** Escapes `%`, `_` and `\` so user text matches literally inside ILIKE. */
 const likeContains = (text: string) => `%${text.replace(/[%_\\]/g, (c) => `\\${c}`)}%`;
@@ -101,7 +118,7 @@ export async function searchBusinesses(db: DbOrTx, input: SearchInput = {}): Pro
 
   const rating = sql<number | null>`(select round(avg(rv.rating)::numeric, 1)::float from reviews rv where rv.business_id = ${bizId} and rv.moderation_status = 'visible')`;
   const reviewCount = sql<number>`(select count(*)::int from reviews rv where rv.business_id = ${bizId} and rv.moderation_status = 'visible')`;
-  const priceFrom = sql<number | null>`(select min(pr.amount) from pricing_rules pr join resources r on r.id = pr.resource_id where pr.business_id = ${bizId} and r.status = 'active' and pr.status = 'active' and pr.rule_type = 'base')`;
+  const priceFrom = cheapestOf<number | null>("pr.amount");
 
   const filters = [isPubliclyListed];
   if (like) {
@@ -146,9 +163,8 @@ export async function searchBusinesses(db: DbOrTx, input: SearchInput = {}): Pro
         rating,
         reviewCount,
         priceFrom,
-        // The unit and per-person flag of the resource that sets `priceFrom`, so the card never mislabels it.
-        priceUnit: sql<"per_hour" | "per_slot" | null>`(select r.price_unit from resources r join pricing_rules pr on pr.resource_id = r.id where r.business_id = ${bizId} and r.status = 'active' and pr.status = 'active' and pr.rule_type = 'base' order by pr.amount, r.sort_order, r.id limit 1)`,
-        pricePerPerson: sql<boolean | null>`(select r.price_per_person from resources r join pricing_rules pr on pr.resource_id = r.id where r.business_id = ${bizId} and r.status = 'active' and pr.status = 'active' and pr.rule_type = 'base' order by pr.amount, r.sort_order, r.id limit 1)`,
+        priceUnit: cheapestOf<"per_hour" | "per_slot" | null>("r.price_unit"),
+        pricePerPerson: cheapestOf<boolean | null>("r.price_per_person"),
         categories: sql<{ slug: string; name: string }[]>`coalesce((select json_agg(json_build_object('slug', ac.slug, 'name', ac.name) order by ac.sort_order) from business_categories bc join activity_categories ac on ac.id = bc.category_id where bc.business_id = ${bizId}), '[]'::json)`,
         localities: sql<string[]>`coalesce((select json_agg(distinct l.locality) from locations l where l.business_id = ${bizId} and l.status = 'active'), '[]'::json)`,
         city: sql<string | null>`(select l.city from locations l where l.business_id = ${bizId} and l.status = 'active' limit 1)`,
@@ -209,7 +225,7 @@ export async function getPublicBusiness(db: DbOrTx, slug: string) {
         priceUnit: resources.priceUnit,
         pricePerPerson: resources.pricePerPerson,
         advanceDays: resources.advanceDays,
-        priceFrom: sql<number | null>`(select min(pr.amount) from pricing_rules pr where pr.resource_id = ${resourceId} and pr.status = 'active')`,
+        priceFrom: resourceFromPrice('"resources"'),
       })
       .from(resources)
       .where(and(eq(resources.businessId, business.id), eq(resources.status, "active")))

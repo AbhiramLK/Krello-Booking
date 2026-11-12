@@ -258,6 +258,75 @@ describe("sorting and ratings", () => {
   });
 });
 
+describe("card and page prices come from the same rules", () => {
+  /** Replaces every rule of a venue with one location-wide default (no resource), as a venue priced that way would have. */
+  async function priceLocationWide(v: Listed, amount: number) {
+    await db.delete(pricingRules).where(eq(pricingRules.businessId, v.businessId));
+    await db.insert(pricingRules).values({ businessId: v.businessId, locationId: v.locationId, resourceId: null, ruleType: "base", amount });
+  }
+
+  const cardOf = async (v: Listed) => (await searchBusinesses(db, { q: v.name })).items.find((c) => c.slug === v.slug)!;
+
+  it("shows a cheaper non-base rule on both the card and the page", async () => {
+    const v = await listedVenue(`Offpeak ${token()}`);
+    // Table 1 gets a weekday-morning rate well below every base price.
+    await db.insert(pricingRules).values({
+      businessId: v.businessId,
+      locationId: v.locationId,
+      resourceId: v.tables[0]!,
+      ruleType: "time_of_day",
+      label: "Morning",
+      startMinute: 10 * 60,
+      endMinute: 12 * 60,
+      amount: 9000,
+    });
+    const card = await cardOf(v);
+    const page = (await getPublicBusiness(db, v.slug))!;
+    const table1 = page.locations[0]!.resources.find((r) => r.id === v.tables[0])!;
+
+    expect(table1.priceFrom).toBe(9000);
+    expect(card).toMatchObject({ priceFrom: 9000, priceUnit: table1.priceUnit, pricePerPerson: table1.pricePerPerson });
+    // The card is the cheapest "from" on the page.
+    expect(card.priceFrom).toBe(Math.min(...page.locations.flatMap((l) => l.resources.map((r) => r.priceFrom!))));
+  });
+
+  it("ignores inactive rules", async () => {
+    const v = await listedVenue(`Inactive rule ${token()}`);
+    await db.insert(pricingRules).values({ businessId: v.businessId, locationId: v.locationId, resourceId: v.tables[0]!, ruleType: "time_of_day", startMinute: 600, endMinute: 720, amount: 1000, status: "inactive" });
+    expect((await cardOf(v)).priceFrom).toBe(15000);
+    const page = (await getPublicBusiness(db, v.slug))!;
+    expect(page.locations[0]!.resources.find((r) => r.id === v.tables[0])!.priceFrom).toBe(30000);
+  });
+
+  it("prices a venue that only has a location-wide default, on the card and the page", async () => {
+    const t = token();
+    const v = await listedVenue(`Wide ${t}`);
+    await priceLocationWide(v, 12500);
+    // Make the cheapest resource unambiguous: Table 1 is first in the venue's order.
+    await db.update(resources).set({ sortOrder: -1 }).where(eq(resources.id, v.tables[0]!));
+
+    const card = await cardOf(v);
+    expect(card).toMatchObject({ priceFrom: 12500, priceUnit: "per_hour", pricePerPerson: false });
+    const page = (await getPublicBusiness(db, v.slug))!;
+    expect(page.locations[0]!.resources.map((r) => r.priceFrom)).toEqual([12500, 12500, 12500, 12500]);
+  });
+
+  it("includes a location-wide priced venue in the price ceiling and the price sort", async () => {
+    const t = token();
+    const wideLow = await listedVenue(`Sorted wide low ${t}`);
+    const wideMid = await listedVenue(`Sorted wide mid ${t}`);
+    const own = await listedVenue(`Sorted own ${t}`, { price: 30000 });
+    await priceLocationWide(wideLow, 12500);
+    await priceLocationWide(wideMid, 20000);
+
+    expect(await slugsFor(t, { sort: "price_asc" })).toEqual([wideLow.slug, wideMid.slug, own.slug]);
+    expect(await slugsFor(t, { sort: "price_desc" })).toEqual([own.slug, wideMid.slug, wideLow.slug]);
+    expect(await slugsFor(t, { maxPrice: 12500 })).toEqual([wideLow.slug]);
+    expect((await slugsFor(t, { maxPrice: 12499 })).length).toBe(0);
+    expect((await slugsFor(t, { maxPrice: 20000, sort: "price_asc" }))).toEqual([wideLow.slug, wideMid.slug]);
+  });
+});
+
 describe("what the public page exposes", () => {
   const PHONE = "+917770001234";
   const NOTE = "INTERNAL-ONLY-NOTE";
