@@ -1,6 +1,6 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { auditLogs, bookingAllocations, bookingStatusHistory, bookings, outboxEvents, resourceSchedules, type Db } from "@krello/database";
+import { auditLogs, bookingAllocations, bookingStatusHistory, bookings, outboxEvents, resourceSchedules, users, type Db } from "@krello/database";
 import {
   createBlock,
   createBooking,
@@ -123,6 +123,74 @@ describe("double-booking prevention", () => {
     const [a, b] = await Promise.all([createBooking(db, input), createBooking(db, input)]);
     expect(a.booking.id).toBe(b.booking.id);
     expect([a.replayed, b.replayed].sort()).toEqual([false, true]);
+  });
+
+  describe("replay hardening", () => {
+    async function newUser() {
+      const [u] = await db
+        .insert(users)
+        .values({ phone: `+9197${Math.floor(Math.random() * 1e8).toString().padStart(8, "0")}`, name: "Replayer" })
+        .returning();
+      return u!.id;
+    }
+    const tokenHashOf = async (id: string) => (await db.select().from(bookings).where(eq(bookings.id, id)))[0]!.statusTokenHash;
+
+    it("gives a fresh status link to the customer who made the booking", async () => {
+      const v = await makeVenue(db);
+      const userId = await newUser();
+      const input = online(v, [v.tables[0]!], 18, { idempotencyKey: "own-1", customer: { ...customer(), userId } });
+      const first = await createBooking(db, input);
+      const again = await createBooking(db, input);
+      expect(again.replayed).toBe(true);
+      expect(again.booking.id).toBe(first.booking.id);
+      expect(again.statusToken).not.toBe(first.statusToken);
+    });
+
+    it("refuses another customer who presents the key, issues no token and leaves the original link alone", async () => {
+      const v = await makeVenue(db);
+      const owner = await newUser();
+      const other = await newUser();
+      const first = await createBooking(
+        db,
+        online(v, [v.tables[0]!], 18, { idempotencyKey: "stolen-1", customer: { ...customer(), userId: owner } }),
+      );
+      const before = await tokenHashOf(first.booking.id);
+
+      const attempt = createBooking(
+        db,
+        online(v, [v.tables[0]!], 18, { idempotencyKey: "stolen-1", customer: { ...customer("Other"), userId: other } }),
+      );
+      await expect(attempt).rejects.toMatchObject({ code: "idempotency_conflict", status: 409 });
+      // A guest with no account is not the booking's customer either.
+      expect(
+        await code(createBooking(db, online(v, [v.tables[0]!], 18, { idempotencyKey: "stolen-1", customer: customer("Guest") }))),
+      ).toBe("idempotency_conflict");
+      expect(await tokenHashOf(first.booking.id)).toBe(before);
+    });
+
+    it("refuses the same replay when it races the original", async () => {
+      const v = await makeVenue(db);
+      const [a, b] = [await newUser(), await newUser()];
+      const results = await Promise.all([
+        code(createBooking(db, online(v, [v.tables[0]!], 19, { idempotencyKey: "race-1", customer: { ...customer(), userId: a } }))),
+        code(createBooking(db, online(v, [v.tables[0]!], 19, { idempotencyKey: "race-1", customer: { ...customer(), userId: b } }))),
+      ]);
+      expect(results.sort()).toEqual(["idempotency_conflict", "ok"]);
+    });
+
+    it("does not treat another business's identical key as a replay", async () => {
+      const v1 = await makeVenue(db);
+      const v2 = await makeVenue(db);
+      const [x, y] = await Promise.all([
+        createBooking(db, online(v1, [v1.tables[0]!], 18, { idempotencyKey: "shared-key" })),
+        createBooking(db, online(v2, [v2.tables[0]!], 18, { idempotencyKey: "shared-key" })),
+      ]);
+      expect(x.replayed).toBe(false);
+      expect(y.replayed).toBe(false);
+      expect(x.booking.id).not.toBe(y.booking.id);
+      expect(x.booking.businessId).toBe(v1.businessId);
+      expect(y.booking.businessId).toBe(v2.businessId);
+    });
   });
 });
 

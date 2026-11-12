@@ -290,7 +290,7 @@ export async function createBooking(db: Db, input: CreateBookingInput): Promise<
           .select()
           .from(bookings)
           .where(and(eq(bookings.businessId, businessId), eq(bookings.idempotencyKey, input.idempotencyKey)));
-        if (existing) return replay(tx, existing);
+        if (existing) return replay(tx, existing, input);
       }
 
       const access = await getTenantAccess(tx, businessId);
@@ -333,7 +333,7 @@ export async function createBooking(db: Db, input: CreateBookingInput): Promise<
           .select()
           .from(bookings)
           .where(and(eq(bookings.businessId, businessId), eq(bookings.idempotencyKey, input.idempotencyKey)));
-        if (existing) return replay(tx, existing);
+        if (existing) return replay(tx, existing, input);
       }
 
       const { ctx, snapshot } = await priceSelection(tx, loc, resourceIds, input, now, online ? "customer" : "business");
@@ -424,20 +424,30 @@ export async function createBooking(db: Db, input: CreateBookingInput): Promise<
     if (code === "23505" && input.idempotencyKey) {
       // A concurrent duplicate submission won the race; return its booking.
       return db.transaction(async (tx) => {
+        const [loc] = await tx.select({ businessId: locations.businessId }).from(locations).where(eq(locations.id, input.locationId));
+        if (!loc) throw e;
         const [existing] = await tx
           .select()
           .from(bookings)
-          .where(eq(bookings.idempotencyKey, input.idempotencyKey!));
+          .where(and(eq(bookings.businessId, loc.businessId), eq(bookings.idempotencyKey, input.idempotencyKey!)));
         if (!existing) throw e;
-        return replay(tx, existing);
+        return replay(tx, existing, input);
       });
     }
     throw e;
   }
 }
 
-/** A repeated submission gets the original booking and a fresh status token. */
-async function replay(tx: Tx, existing: BookingRow): Promise<CreateBookingResult> {
+/**
+ * A repeated submission gets the original booking and a fresh status token.
+ * An online replay must come from the booking's own customer: anyone else who
+ * presents the key is refused, no token is issued and the original link is
+ * left as it was.
+ */
+async function replay(tx: Tx, existing: BookingRow, input: CreateBookingInput): Promise<CreateBookingResult> {
+  if (input.source === "online" && (existing.customerUserId ?? null) !== (input.customer.userId ?? null)) {
+    throw new EngineError("idempotency_conflict", "That request has already been used. Please start your request again.");
+  }
   const { token, hash } = newStatusToken();
   const [booking] = await tx
     .update(bookings)

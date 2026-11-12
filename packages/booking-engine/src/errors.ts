@@ -7,6 +7,7 @@ export type EngineErrorCode =
   | "not_bookable"
   | "read_only"
   | "limit"
+  | "idempotency_conflict"
   | "payment_exceeds_due";
 
 const STATUS: Record<EngineErrorCode, number> = {
@@ -18,6 +19,7 @@ const STATUS: Record<EngineErrorCode, number> = {
   not_bookable: 403,
   read_only: 403,
   limit: 429,
+  idempotency_conflict: 409,
   payment_exceeds_due: 422,
 };
 
