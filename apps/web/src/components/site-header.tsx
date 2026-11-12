@@ -12,19 +12,20 @@ export function SiteHeader() {
         <Link href="/" className="rounded-md text-lg font-semibold tracking-tight focus-visible:outline-2 focus-visible:outline-offset-4">
           Krello
         </Link>
+        {/* Secondary links collapse into the footer below sm so the header fits 360 px. */}
         <nav aria-label="Main" className="flex items-center gap-1 text-sm">
           {NAV.map((item) => (
             <Link
               key={item.href}
               href={item.href}
-              className="rounded-full px-3 py-2 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2"
+              className="hidden whitespace-nowrap rounded-full px-3 py-2 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 sm:inline-block"
             >
               {item.label}
             </Link>
           ))}
           <Link
             href="/login"
-            className="rounded-full bg-primary px-4 py-2 font-medium text-primary-foreground transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2"
+            className="whitespace-nowrap rounded-full bg-primary px-4 py-2 font-medium text-primary-foreground transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2"
           >
             Sign in
           </Link>

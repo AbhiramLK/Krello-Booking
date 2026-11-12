@@ -12,6 +12,11 @@ describe("format", () => {
     expect(formatDay("2026-11-14T14:00:00Z", tz)).toBe("Sat, 14 Nov");
   });
 
+  it("abbreviates September as Sep", () => {
+    expect(formatDay("2026-09-05T14:00:00Z", tz)).toBe("Sat, 5 Sep");
+    expect(formatDayLong("2026-09-05")).toBe("Saturday, 5 September 2026");
+  });
+
   it("formats a long day from a calendar date", () => {
     expect(formatDayLong("2026-11-14")).toBe("Saturday, 14 November 2026");
   });

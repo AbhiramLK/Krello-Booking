@@ -11,7 +11,7 @@ function toDate(d: DateInput): Date {
 /** Reads parts through Intl so output does not depend on the ICU version's spacing. */
 function parts(d: DateInput, tz: string, options: Intl.DateTimeFormatOptions): Record<string, string> {
   const out: Record<string, string> = {};
-  for (const p of new Intl.DateTimeFormat("en-GB", { ...options, timeZone: tz }).formatToParts(toDate(d))) {
+  for (const p of new Intl.DateTimeFormat("en-US", { ...options, timeZone: tz }).formatToParts(toDate(d))) {
     out[p.type] = p.value;
   }
   return out;

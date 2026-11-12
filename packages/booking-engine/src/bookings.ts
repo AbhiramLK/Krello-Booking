@@ -15,6 +15,7 @@ import {
   type Tx,
 } from "@krello/database";
 import { calculatePrice, PricingError, type PriceResult } from "@krello/pricing";
+import { STATUS_LABEL, type BookingStatus as LabelStatus } from "./labels";
 import { evaluateInterval } from "./availability";
 import { getTenantAccess, loadDayContext, type DayContext } from "./context";
 import { EngineError } from "./errors";
@@ -24,6 +25,11 @@ import { addDays, localDateOf, minuteOfDate } from "./time";
 
 export type BookingRow = typeof bookings.$inferSelect;
 export type BookingStatus = BookingRow["status"];
+
+// Labels live in ./labels so browser code can import them; this stops them drifting from the database enum.
+export { STATUS_LABEL };
+const statusesMatch: [BookingStatus] extends [LabelStatus] ? ([LabelStatus] extends [BookingStatus] ? true : false) : false = true;
+void statusesMatch;
 export type BookingSource = BookingRow["source"];
 
 /** Most pending requests one phone number may hold across the platform. */
@@ -417,17 +423,6 @@ const ALLOWED_FROM: Record<BookingAction, BookingStatus[]> = {
 };
 
 const RELEASES: BookingAction[] = ["reject", "expire", "cancel_by_customer", "cancel_by_business"];
-
-export const STATUS_LABEL: Record<BookingStatus, string> = {
-  pending: "Awaiting venue response",
-  approved: "Confirmed",
-  rejected: "Declined",
-  expired: "Expired",
-  cancelled_by_customer: "Cancelled by customer",
-  cancelled_by_business: "Cancelled by venue",
-  completed: "Completed",
-  no_show: "No-show",
-};
 
 export interface TransitionInput {
   bookingId: string;

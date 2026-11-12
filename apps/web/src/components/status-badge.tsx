@@ -9,7 +9,7 @@ import {
   UserX,
   type LucideIcon,
 } from "lucide-react";
-import { STATUS_LABEL, type BookingStatus } from "@krello/booking-engine";
+import { STATUS_LABEL, type BookingStatus } from "@krello/booking-engine/labels";
 import { cn } from "@/lib/utils";
 
 export type PaymentStatus = "unpaid" | "partially_paid" | "paid";
