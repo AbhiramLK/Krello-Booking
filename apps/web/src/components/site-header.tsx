@@ -1,11 +1,18 @@
 import Link from "next/link";
+import { listMemberships, maskPhone } from "@krello/core";
+import { UserMenu } from "@/components/user-menu";
+import { getDb } from "@/lib/db";
+import { getCurrentUser } from "@/lib/session";
 
 const NAV = [
   { href: "/search", label: "Find a venue" },
   { href: "/for-business", label: "For business" },
 ];
 
-export function SiteHeader() {
+export async function SiteHeader() {
+  const user = await getCurrentUser();
+  const isBusinessMember = user ? (await listMemberships(getDb(), user.id)).length > 0 : false;
+
   return (
     <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur">
       <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
@@ -23,12 +30,16 @@ export function SiteHeader() {
               {item.label}
             </Link>
           ))}
-          <Link
-            href="/login"
-            className="whitespace-nowrap rounded-full bg-primary px-4 py-2 font-medium text-primary-foreground transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2"
-          >
-            Sign in
-          </Link>
+          {user ? (
+            <UserMenu name={user.name} phone={maskPhone(user.phone)} isBusinessMember={isBusinessMember} />
+          ) : (
+            <Link
+              href="/login"
+              className="whitespace-nowrap rounded-full bg-primary px-4 py-2 font-medium text-primary-foreground transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2"
+            >
+              Sign in
+            </Link>
+          )}
         </nav>
       </div>
     </header>
